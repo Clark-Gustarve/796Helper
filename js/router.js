@@ -14,7 +14,7 @@ const Router = (function () {
 
     function navigate(path) {
         if (!path || !routes[path]) {
-            path = 'chat'; // default route
+            path = 'dashboard'; // default route
         }
 
         if (currentRoute === path) return;
@@ -69,7 +69,7 @@ const Router = (function () {
     }
 
     function handleHashChange() {
-        const hash = window.location.hash.replace('#', '') || 'chat';
+        const hash = window.location.hash.replace('#', '') || 'dashboard';
         navigate(hash);
     }
 

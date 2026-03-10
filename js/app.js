@@ -12,8 +12,8 @@
         Sidebar.init();
 
         // 3. Register page routes
-        Router.register('chat', ChatPage);
         Router.register('dashboard', DashboardPage);
+        Router.register('chat', ChatPage);
 
         // 4. Initialize router (triggers first page render)
         Router.init();
