@@ -6,6 +6,28 @@
 
 ---
 
+## [v1.4.0] - 2026-03-10
+
+### 新增
+- **全面移动端适配**：系统性优化手机端浏览体验，覆盖所有页面和组件
+- **CSS 变量断点覆盖**：在 `variables.css` 中新增 768px/480px 断点的设计令牌动态覆盖（字体大小、间距、header 高度自动缩放）
+- **触摸设备优化**：通过 `@media (hover: none)` 禁用卡片/按钮的 hover 上浮动画，消除触摸屏粘滞态
+- **全局触摸交互增强**：添加 `touch-action: manipulation`（消除 300ms 点击延迟）、`-webkit-tap-highlight-color: transparent`（消除点击高亮）
+- **dvh 视口单位支持**：body、.app、.sidebar、.main-content 使用 `100dvh`（fallback `100vh`），解决移动端浏览器地址栏收缩时的高度跳变
+- **safe-area 安全区域适配**：viewport-fit=cover + `env(safe-area-inset-*)` 处理，支持刘海屏/异形屏
+- **Dashboard 页 480px 断点**：补全小屏适配（紧凑间距、缩小字体、缩减 grid 间隙）
+- **Chat 页 480px 断点**：补全小屏适配（消息气泡/头像缩小、输入区紧凑化、隐藏输入提示）
+- **Chat 输入区 safe-area**：聊天输入区底部补偿安全区域，防止被手机底部横条遮挡
+- **Chat 输入框 16px 字体**：避免 iOS 自动缩放（font-size < 16px 触发）
+- **Header 移动端紧凑化**：768px 时高度缩至 52px、480px 时缩至 48px，标题字体缩小
+- **通用组件响应式**：components.css 新增 768px/480px 双断点（按钮最小触摸区 44px、卡片紧凑 padding、输入框 16px 字体、标签/徽章缩小）
+- **影视搜索触摸优化**：结果卡片、来源选项、操作按钮禁用 hover 效果，Toast 适配 safe-area
+- **侧边栏导航触摸优化**：移动端 nav-item 最小高度 44px，满足触摸目标尺寸规范
+- **Layout 480px 断点**：补全 header/按钮在小屏手机的进一步紧凑适配
+- **动画性能优化**：移动端动画时长缩短至 0.2s，减少性能开销
+
+---
+
 ## [v1.3.0] - 2026-03-10
 
 ### 优化

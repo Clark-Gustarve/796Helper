@@ -179,3 +179,40 @@
     --glass-blur: blur(20px);
     --glass-blur-heavy: blur(40px);
 }
+
+/* --- Responsive Design Token Overrides (Tablet) --- */
+@media (max-width: 768px) {
+    :root {
+        /* Typography - 平板/大屏手机 */
+        --font-size-xl: 22px;
+        --font-size-2xl: 24px;
+        --font-size-3xl: 30px;
+
+        /* Spacing - 适度缩小 */
+        --space-lg: 20px;
+        --space-xl: 24px;
+        --space-2xl: 36px;
+
+        /* Layout */
+        --header-height: 52px;
+    }
+}
+
+/* --- Responsive Design Token Overrides (Mobile) --- */
+@media (max-width: 480px) {
+    :root {
+        /* Typography - 小屏手机 */
+        --font-size-lg: 16px;
+        --font-size-xl: 20px;
+        --font-size-2xl: 22px;
+        --font-size-3xl: 26px;
+
+        /* Spacing - 进一步缩小 */
+        --space-lg: 16px;
+        --space-xl: 20px;
+        --space-2xl: 28px;
+
+        /* Layout */
+        --header-height: 48px;
+    }
+}

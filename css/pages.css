@@ -82,6 +82,32 @@
     }
 }
 
+@media (max-width: 480px) {
+    .dashboard-page {
+        padding: var(--space-md) var(--space-sm);
+    }
+
+    .dashboard-welcome {
+        margin-bottom: var(--space-lg);
+    }
+
+    .dashboard-welcome .greeting {
+        font-size: var(--font-size-lg);
+    }
+
+    .dashboard-welcome .date-info {
+        font-size: var(--font-size-xs);
+    }
+
+    .dashboard-grid {
+        gap: var(--space-sm);
+    }
+
+    .dashboard-footer {
+        padding: var(--space-md) 0;
+    }
+}
+
 /* ===========================================
    Chat Page
    =========================================== */
@@ -335,6 +361,7 @@
 
     .chat-input-area {
         padding: var(--space-sm) var(--space-md);
+        padding-bottom: calc(var(--space-sm) + env(safe-area-inset-bottom, 0px));
     }
 
     .message {
@@ -357,6 +384,94 @@
 
     .chat-welcome .welcome-title {
         font-size: var(--font-size-lg);
+    }
+
+    .chat-input {
+        font-size: 16px;
+    }
+}
+
+@media (max-width: 480px) {
+    .chat-messages {
+        padding: var(--space-sm);
+        gap: var(--space-sm);
+    }
+
+    .chat-input-area {
+        padding: var(--space-xs) var(--space-sm);
+        padding-bottom: calc(var(--space-xs) + env(safe-area-inset-bottom, 0px));
+    }
+
+    .message {
+        max-width: 95%;
+    }
+
+    .message-bubble {
+        padding: 10px 12px;
+        font-size: var(--font-size-sm);
+    }
+
+    .message-avatar {
+        width: 28px;
+        height: 28px;
+    }
+
+    .message-ai .message-avatar svg {
+        width: 14px;
+        height: 14px;
+    }
+
+    .message-user .message-avatar svg {
+        width: 12px;
+        height: 12px;
+    }
+
+    .chat-welcome {
+        padding: var(--space-md);
+    }
+
+    .chat-welcome .welcome-icon {
+        width: 56px;
+        height: 56px;
+    }
+
+    .chat-welcome .welcome-icon svg {
+        width: 28px;
+        height: 28px;
+    }
+
+    .chat-welcome .welcome-title {
+        font-size: var(--font-size-md);
+    }
+
+    .chat-welcome .welcome-subtitle {
+        font-size: var(--font-size-xs);
+    }
+
+    .chat-welcome .welcome-tags {
+        gap: var(--space-xs);
+    }
+
+    .chat-send-btn {
+        width: 40px;
+        height: 40px;
+    }
+
+    .chat-send-btn svg {
+        width: 18px;
+        height: 18px;
+    }
+
+    .chat-input-hint {
+        display: none;
+    }
+
+    .chat-input-wrapper {
+        gap: var(--space-xs);
+    }
+
+    .chat-input {
+        padding: 10px 12px;
     }
 }
 
@@ -946,10 +1061,11 @@
         justify-content: center;
         padding: 12px;
         border-radius: var(--radius-lg);
+        min-height: 44px;
     }
 
     .movie-search-input {
-        font-size: var(--font-size-base);
+        font-size: 16px;
         padding: 12px 40px 12px 44px;
     }
 
@@ -961,6 +1077,7 @@
     .movie-source-option {
         padding: 8px 14px;
         font-size: var(--font-size-xs);
+        min-height: 44px;
     }
 
     .movie-filter-bar {
@@ -970,6 +1087,7 @@
     .movie-filter-tag {
         padding: 6px 12px;
         font-size: var(--font-size-xs);
+        min-height: 36px;
     }
 
     .movie-result-card {
@@ -997,8 +1115,10 @@
 
     .movie-result-link-btn,
     .movie-result-copy-btn {
-        width: 32px;
-        height: 32px;
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        min-height: 36px;
     }
 
     .movie-state {
@@ -1020,9 +1140,10 @@
     }
 
     .movie-toast {
-        bottom: 16px;
+        bottom: calc(16px + env(safe-area-inset-bottom, 0px));
         font-size: var(--font-size-xs);
         padding: 8px 16px;
+        max-width: calc(100vw - 32px);
     }
 
     .movie-loading-spinner {
@@ -1033,6 +1154,31 @@
     .movie-welcome-orb {
         width: 100px;
         height: 100px;
+    }
+}
+
+/* --- Touch Device: Disable hover effects --- */
+@media (hover: none) {
+    .movie-result-card:hover {
+        transform: none;
+        box-shadow: none;
+        border-color: var(--border-default);
+    }
+
+    .movie-source-option:hover {
+        transform: none;
+        box-shadow: none;
+    }
+
+    .movie-search-btn:hover {
+        transform: none;
+    }
+
+    .movie-result-link-btn:hover,
+    .movie-result-copy-btn:hover {
+        background: transparent;
+        border-color: var(--border-default);
+        color: var(--text-secondary);
     }
 }
 

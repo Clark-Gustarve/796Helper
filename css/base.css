@@ -31,12 +31,16 @@ body {
     background-color: var(--bg-base);
     overflow: hidden;
     height: 100vh;
+    height: 100dvh;
     transition: color var(--transition-base), background-color var(--transition-base);
+    -webkit-tap-highlight-color: transparent;
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
 }
 
 a {
     color: inherit;
     text-decoration: none;
+    touch-action: manipulation;
 }
 
 button {
@@ -47,6 +51,7 @@ button {
     background: none;
     outline: none;
     color: inherit;
+    touch-action: manipulation;
 }
 
 input, textarea {
@@ -56,6 +61,7 @@ input, textarea {
     outline: none;
     background: none;
     color: inherit;
+    touch-action: manipulation;
 }
 
 textarea {
@@ -209,4 +215,20 @@ img, svg {
 
 .animate-slide-up {
     animation: slideUp 0.3s ease forwards;
+}
+
+/* --- Touch Device Optimizations --- */
+@media (hover: none) {
+    * {
+        -webkit-tap-highlight-color: transparent;
+    }
+}
+
+/* --- Mobile: Reduce animations for performance --- */
+@media (max-width: 768px) {
+    .animate-fade-in,
+    .animate-fade-in-up,
+    .animate-slide-up {
+        animation-duration: 0.2s;
+    }
 }
