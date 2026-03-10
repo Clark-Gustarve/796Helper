@@ -1,13 +1,13 @@
 /* ============================================
    796Helper - Movie Search Page Module
-   影视资源搜索页面（v1.3.0 性能优化版）
+   影视资源搜索页面（v1.5.0 链接修复版）
    ============================================ */
 
 const MovieSearchPage = (function () {
     const title = '影视搜索';
 
     // Workers API 地址
-    const API_BASE = 'https://796helper-movie-search.YOUR_SUBDOMAIN.workers.dev';
+    const API_BASE = 'https://796helper-movie-search.clown8379.workers.dev';
 
     // ==================== 缓存管理器 ====================
     const CACHE_PREFIX = '796h-mc-';
@@ -179,6 +179,12 @@ const MovieSearchPage = (function () {
             .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
     }
 
+    // 判断是否为直接的网盘链接（而非搜索引擎页面）
+    function isDirectPanLink(url) {
+        if (!url) return false;
+        return /(?:pan\.baidu\.com|yun\.baidu\.com|drive\.quark\.cn|www\.alipan\.com|www\.aliyundrive\.com|pan\.xunlei\.com|cloud\.189\.cn|115\.com|lanzou)/i.test(url);
+    }
+
     function renderSourceBadge(source, sourceLabel) {
         const style = getSourceStyle(source);
         return `<span class="movie-source-badge" style="background:${style.bg};color:${style.text};border:1px solid ${style.border}">${sourceLabel}</span>`;
@@ -207,8 +213,8 @@ const MovieSearchPage = (function () {
                     </div>
                 </div>
                 <div class="movie-result-actions">
-                    ${item.link ? `<a href="${escapeHtml(item.link)}" target="_blank" rel="noopener noreferrer" class="movie-result-link-btn" title="前往搜索引擎查看资源">
-                        <i data-lucide="external-link"></i>
+                    ${item.link ? `<a href="${escapeHtml(item.link)}" target="_blank" rel="noopener noreferrer" class="movie-result-link-btn" title="${isDirectPanLink(item.link) ? '打开网盘链接' : '前往搜索引擎查看资源'}">
+                        <i data-lucide="${isDirectPanLink(item.link) ? 'external-link' : 'search'}"></i>
                     </a>` : ''}
                     <button class="movie-result-copy-btn" data-title="${escapeHtml(item.title)}" data-link="${escapeHtml(item.link)}" data-code="${escapeHtml(item.code)}" title="复制资源信息">
                         <i data-lucide="copy"></i>
@@ -598,7 +604,7 @@ const MovieSearchPage = (function () {
         performSearch(keyword);
     }, 300);
 
-    // 演示数据生成
+    // 演示数据生成（API 不可用时的 fallback）
     function generateDemoData(keyword) {
         const sources = currentSearchSource === 'all'
             ? [
@@ -613,9 +619,19 @@ const MovieSearchPage = (function () {
 
         if (sources.length === 0) return [];
 
+        // 来源对应的 pan_channel 参数映射
+        const panChannelMap = {
+            'all': 'all', 'baidu': 'baidu', 'quark': 'kuake',
+            'ali': 'ali', 'thunder': 'xunlei', 'tianyi': 'tianyi'
+        };
+
         const qualities = ['4K', '1080P', '720P', 'HDR', '蓝光'];
         const types = ['', '完整版', '国语配音', '中英双字', '导演剪辑版'];
         const results = [];
+
+        // 生成 UP 云搜搜索页链接（可实际打开的链接）
+        const panChannel = panChannelMap[currentSearchSource] || 'all';
+        const searchLink = `https://www.upyunso.com/search?keyword=${encodeURIComponent(keyword)}&pan_channel=${panChannel}`;
 
         const count = 6 + Math.floor(Math.random() * 10);
         for (let i = 0; i < count; i++) {
@@ -628,7 +644,7 @@ const MovieSearchPage = (function () {
                 title: `${keyword} ${titleSuffix}`,
                 source: src.source,
                 sourceLabel: src.sourceLabel,
-                link: `https://example.com/resource/${i + 1}`,
+                link: searchLink,
                 code: Math.random() > 0.3 ? generateCode() : '',
                 time: generateDate(),
             });
