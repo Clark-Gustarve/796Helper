@@ -1,24 +1,33 @@
 /* ============================================
    796Helper - Movie Search Page Module
-   影视资源搜索页面
+   影视资源搜索页面（优化版）
    ============================================ */
 
 const MovieSearchPage = (function () {
     const title = '影视搜索';
 
-    // Workers API 地址（部署后替换为实际地址）
+    // Workers API 地址
     const API_BASE = 'https://796helper-movie-search.YOUR_SUBDOMAIN.workers.dev';
 
     // 搜索状态
     let searchResults = [];
     let filteredResults = [];
     let currentSource = 'all';
+    let currentSearchSource = 'all'; // 当前选择的搜索源（搜索前选择）
     let isLoading = false;
     let currentKeyword = '';
-    let debounceTimer = null;
+    let abortController = null;
+    let searchCache = new Map(); // 搜索结果缓存
 
-    // 来源筛选标签配置
-    const sourceTags = [
+    // 搜索源选项（搜索前选择）
+    const searchSourceOptions = [
+        { key: 'all', label: '全部资源', icon: 'layers', desc: '搜索所有网盘' },
+        { key: 'baidu', label: '百度网盘', icon: 'cloud', desc: '百度云资源' },
+        { key: 'quark', label: '夸克网盘', icon: 'zap', desc: '夸克云资源' },
+    ];
+
+    // 结果筛选标签
+    const filterTags = [
         { key: 'all', label: '全部', icon: 'layers' },
         { key: 'baidu', label: '百度网盘', icon: 'cloud' },
         { key: 'quark', label: '夸克网盘', icon: 'zap' },
@@ -37,11 +46,14 @@ const MovieSearchPage = (function () {
         other: { bg: 'rgba(99, 110, 130, 0.15)', text: '#636E82', border: 'rgba(99, 110, 130, 0.3)' },
     };
 
-    // 热门搜索推荐
-    const hotSearches = ['流浪地球', '三体', '哈利波特', '复仇者联盟', '海贼王'];
-
     function getSourceStyle(source) {
         return sourceColors[source] || sourceColors.other;
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
     }
 
     function renderSourceBadge(source, sourceLabel) {
@@ -59,7 +71,7 @@ const MovieSearchPage = (function () {
             : '';
 
         return `
-            <div class="movie-result-card" style="animation-delay: ${index * 0.05}s">
+            <div class="movie-result-card" style="animation-delay: ${index * 0.04}s">
                 <div class="movie-result-icon" style="background:${style.bg};border:1px solid ${style.border}">
                     <i data-lucide="film" style="color:${style.text};width:20px;height:20px;"></i>
                 </div>
@@ -72,10 +84,10 @@ const MovieSearchPage = (function () {
                     </div>
                 </div>
                 <div class="movie-result-actions">
-                    ${item.link ? `<a href="${escapeHtml(item.link)}" target="_blank" rel="noopener noreferrer" class="movie-result-link-btn" title="打开链接">
+                    ${item.link ? `<a href="${escapeHtml(item.link)}" target="_blank" rel="noopener noreferrer" class="movie-result-link-btn" title="前往搜索引擎查看资源">
                         <i data-lucide="external-link"></i>
                     </a>` : ''}
-                    <button class="movie-result-copy-btn" data-link="${escapeHtml(item.link)}" data-code="${escapeHtml(item.code)}" title="复制链接">
+                    <button class="movie-result-copy-btn" data-title="${escapeHtml(item.title)}" data-link="${escapeHtml(item.link)}" data-code="${escapeHtml(item.code)}" title="复制资源信息">
                         <i data-lucide="copy"></i>
                     </button>
                 </div>
@@ -83,13 +95,27 @@ const MovieSearchPage = (function () {
         `;
     }
 
+    function renderSearchSourceSelector() {
+        return searchSourceOptions.map(opt => {
+            const active = currentSearchSource === opt.key ? 'active' : '';
+            return `<button class="movie-source-option ${active}" data-search-source="${opt.key}">
+                <i data-lucide="${opt.icon}" style="width:16px;height:16px;"></i>
+                <span class="movie-source-option-label">${opt.label}</span>
+            </button>`;
+        }).join('');
+    }
+
     function renderFilterTags() {
-        return sourceTags.map(tag => {
+        // 只展示有结果的筛选标签
+        const availableSources = new Set(searchResults.map(r => r.source));
+        return filterTags.map(tag => {
             const active = currentSource === tag.key ? 'active' : '';
             const count = tag.key === 'all'
                 ? searchResults.length
                 : searchResults.filter(r => r.source === tag.key).length;
-            const countHtml = searchResults.length > 0 ? `<span class="movie-filter-count">${count}</span>` : '';
+            // 隐藏无结果的标签（除了"全部"）
+            if (tag.key !== 'all' && count === 0) return '';
+            const countHtml = `<span class="movie-filter-count">${count}</span>`;
             return `<button class="movie-filter-tag ${active}" data-source="${tag.key}">
                 <i data-lucide="${tag.icon}" style="width:14px;height:14px;"></i>
                 ${tag.label}
@@ -99,32 +125,34 @@ const MovieSearchPage = (function () {
     }
 
     function renderWelcomeState() {
-        const hotTags = hotSearches.map(kw =>
-            `<button class="movie-hot-tag" data-keyword="${kw}">${kw}</button>`
-        ).join('');
-
         return `
             <div class="movie-state movie-state-welcome">
-                <div class="movie-state-icon">
-                    <i data-lucide="film"></i>
+                <div class="movie-welcome-visual">
+                    <div class="movie-welcome-orb"></div>
+                    <div class="movie-state-icon">
+                        <i data-lucide="film"></i>
+                    </div>
                 </div>
-                <h3 class="movie-state-title">搜索你想看的影视资源</h3>
-                <p class="movie-state-desc">输入影视名称，从多个网盘平台搜索资源</p>
-                <div class="movie-hot-searches">
-                    <span class="movie-hot-label"><i data-lucide="trending-up" style="width:14px;height:14px;"></i> 热门搜索</span>
-                    <div class="movie-hot-tags">${hotTags}</div>
-                </div>
+                <h3 class="movie-state-title">搜索影视资源</h3>
+                <p class="movie-state-desc">输入影视名称，从网盘平台快速搜索资源</p>
             </div>
         `;
     }
 
     function renderLoadingState() {
+        const sourceLabel = currentSearchSource === 'all' ? '全部网盘' :
+            searchSourceOptions.find(s => s.key === currentSearchSource)?.label || '网盘';
         return `
             <div class="movie-state movie-state-loading">
-                <div class="loading-dots">
-                    <span></span><span></span><span></span>
+                <div class="movie-loading-spinner">
+                    <div class="movie-spinner-ring"></div>
+                    <div class="movie-spinner-icon">
+                        <i data-lucide="search" style="width:24px;height:24px;"></i>
+                    </div>
                 </div>
-                <p class="movie-state-desc">正在搜索 "${escapeHtml(currentKeyword)}" 相关资源...</p>
+                <p class="movie-state-title">正在搜索</p>
+                <p class="movie-state-desc">在${sourceLabel}中搜索 "${escapeHtml(currentKeyword)}"...</p>
+                <p class="movie-state-desc movie-search-timer" style="font-size:12px;color:var(--text-muted);margin-top:4px;">超过30秒将自动超时</p>
             </div>
         `;
     }
@@ -136,7 +164,7 @@ const MovieSearchPage = (function () {
                     <i data-lucide="search-x"></i>
                 </div>
                 <h3 class="movie-state-title">未找到相关资源</h3>
-                <p class="movie-state-desc">换个关键词试试，或检查影视名称是否正确</p>
+                <p class="movie-state-desc">换个关键词试试，或切换其他搜索源</p>
             </div>
         `;
     }
@@ -179,12 +207,6 @@ const MovieSearchPage = (function () {
         `;
     }
 
-    function escapeHtml(str) {
-        if (!str) return '';
-        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
-    }
-
     function render() {
         return `
             <div class="movie-search-page page-content">
@@ -208,9 +230,14 @@ const MovieSearchPage = (function () {
                             <span>搜索</span>
                         </button>
                     </div>
+
+                    <!-- Source Selector -->
+                    <div class="movie-source-selector" id="movieSourceSelector">
+                        ${renderSearchSourceSelector()}
+                    </div>
                 </div>
 
-                <!-- Filter Tags -->
+                <!-- Filter Tags (post-search) -->
                 <div class="movie-filter-bar ${searchResults.length > 0 ? '' : 'hidden'}" id="movieFilterBar">
                     ${renderFilterTags()}
                 </div>
@@ -262,10 +289,45 @@ const MovieSearchPage = (function () {
         bindDynamicEvents();
     }
 
+    function updateSourceSelector() {
+        const selector = document.getElementById('movieSourceSelector');
+        if (selector) {
+            selector.innerHTML = renderSearchSourceSelector();
+            if (window.lucide) lucide.createIcons();
+            bindSourceSelectorEvents();
+        }
+    }
+
+    function getCacheKey(keyword, source) {
+        return `${keyword}__${source}`;
+    }
+
     async function performSearch(keyword) {
         if (!keyword || keyword.trim().length === 0) return;
 
         currentKeyword = keyword.trim();
+
+        // 取消上一次请求
+        if (abortController) {
+            abortController.abort();
+        }
+
+        // 检查缓存
+        const cacheKey = getCacheKey(currentKeyword, currentSearchSource);
+        if (searchCache.has(cacheKey)) {
+            const cached = searchCache.get(cacheKey);
+            if (Date.now() - cached.timestamp < 5 * 60 * 1000) { // 5分钟缓存
+                searchResults = cached.data;
+                filteredResults = [...searchResults];
+                currentSource = 'all';
+                isLoading = false;
+                updateContent();
+                return;
+            } else {
+                searchCache.delete(cacheKey);
+            }
+        }
+
         isLoading = true;
         searchResults = [];
         filteredResults = [];
@@ -278,17 +340,47 @@ const MovieSearchPage = (function () {
         const clearBtn = document.getElementById('movieSearchClear');
         if (clearBtn) clearBtn.classList.remove('hidden');
 
+        abortController = new AbortController();
+        const signal = abortController.signal;
+
+        // 30秒超时定时器
+        const SEARCH_TIMEOUT = 30000;
+        let timeoutId = null;
+
         try {
-            const response = await fetch(`${API_BASE}/api/search?keyword=${encodeURIComponent(currentKeyword)}&source=all`);
+            const sourceParam = currentSearchSource !== 'all' ? `&source=${currentSearchSource}` : '';
+            const fetchUrl = `${API_BASE}/api/search?keyword=${encodeURIComponent(currentKeyword)}${sourceParam}`;
+
+            // 使用 Promise.race 实现超时监测
+            const fetchPromise = fetch(fetchUrl, { signal, headers: { 'Accept': 'application/json' } });
+            const timeoutPromise = new Promise((_, reject) => {
+                timeoutId = setTimeout(() => {
+                    if (abortController) abortController.abort();
+                    reject(new Error('SEARCH_TIMEOUT'));
+                }, SEARCH_TIMEOUT);
+            });
+
+            const response = await Promise.race([fetchPromise, timeoutPromise]);
+            clearTimeout(timeoutId);
+            timeoutId = null;
+
             const data = await response.json();
+
+            if (signal.aborted) return;
 
             if (data.success) {
                 searchResults = data.data || [];
                 filteredResults = [...searchResults];
+                // 缓存结果
+                searchCache.set(cacheKey, { data: searchResults, timestamp: Date.now() });
+                // 清理过期缓存（保留最近20条）
+                if (searchCache.size > 20) {
+                    const firstKey = searchCache.keys().next().value;
+                    searchCache.delete(firstKey);
+                }
             } else {
                 searchResults = [];
                 filteredResults = [];
-                // 显示错误状态
                 isLoading = false;
                 const contentArea = document.getElementById('movieContentArea');
                 if (contentArea) {
@@ -299,6 +391,19 @@ const MovieSearchPage = (function () {
                 return;
             }
         } catch (err) {
+            if (timeoutId) clearTimeout(timeoutId);
+            if (err.name === 'AbortError') return; // 请求被取消，不处理
+            // 超时错误
+            if (err.message === 'SEARCH_TIMEOUT') {
+                isLoading = false;
+                const contentArea = document.getElementById('movieContentArea');
+                if (contentArea) {
+                    contentArea.innerHTML = renderErrorState('搜索超时，请检查网络后重试（已超过30秒）');
+                    if (window.lucide) lucide.createIcons();
+                    bindDynamicEvents();
+                }
+                return;
+            }
             // 网络错误 - 使用模拟数据进行演示
             console.warn('API 请求失败，使用演示数据:', err.message);
             searchResults = generateDemoData(currentKeyword);
@@ -311,17 +416,24 @@ const MovieSearchPage = (function () {
 
     // 演示数据生成（API 不可用时）
     function generateDemoData(keyword) {
-        const sources = [
-            { source: 'baidu', sourceLabel: '百度网盘' },
-            { source: 'quark', sourceLabel: '夸克网盘' },
-            { source: 'thunder', sourceLabel: '迅雷网盘' },
-            { source: 'ali', sourceLabel: '阿里云盘' },
-        ];
+        const sources = currentSearchSource === 'all'
+            ? [
+                { source: 'baidu', sourceLabel: '百度网盘' },
+                { source: 'quark', sourceLabel: '夸克网盘' },
+                { source: 'thunder', sourceLabel: '迅雷网盘' },
+                { source: 'ali', sourceLabel: '阿里云盘' },
+            ]
+            : [searchSourceOptions.find(s => s.key === currentSearchSource)]
+                .filter(Boolean)
+                .map(s => ({ source: s.key, sourceLabel: s.label }));
+
+        if (sources.length === 0) return [];
+
         const qualities = ['4K', '1080P', '720P', 'HDR', '蓝光'];
         const types = ['', '完整版', '国语配音', '中英双字', '导演剪辑版'];
         const results = [];
 
-        const count = 8 + Math.floor(Math.random() * 8);
+        const count = 6 + Math.floor(Math.random() * 10);
         for (let i = 0; i < count; i++) {
             const src = sources[Math.floor(Math.random() * sources.length)];
             const quality = qualities[Math.floor(Math.random() * qualities.length)];
@@ -377,30 +489,40 @@ const MovieSearchPage = (function () {
         document.body.appendChild(toast);
         if (window.lucide) lucide.createIcons();
 
-        setTimeout(() => toast.classList.add('show'), 10);
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => toast.classList.add('show'));
+        });
         setTimeout(() => {
             toast.classList.remove('show');
             setTimeout(() => toast.remove(), 300);
         }, 2000);
     }
 
-    function bindDynamicEvents() {
-        // 热门标签点击
-        document.querySelectorAll('.movie-hot-tag').forEach(tag => {
-            tag.addEventListener('click', function () {
-                const keyword = this.dataset.keyword;
-                const input = document.getElementById('movieSearchInput');
-                if (input) input.value = keyword;
-                performSearch(keyword);
+    function bindSourceSelectorEvents() {
+        document.querySelectorAll('.movie-source-option').forEach(opt => {
+            opt.addEventListener('click', function () {
+                const source = this.dataset.searchSource;
+                if (source === currentSearchSource) return;
+                currentSearchSource = source;
+                updateSourceSelector();
+                // 如果已有搜索关键词，自动重新搜索
+                if (currentKeyword) {
+                    performSearch(currentKeyword);
+                }
             });
         });
+    }
 
+    function bindDynamicEvents() {
         // 复制按钮
         document.querySelectorAll('.movie-result-copy-btn').forEach(btn => {
             btn.addEventListener('click', function () {
+                const title = this.dataset.title || '';
                 const link = this.dataset.link || '';
                 const code = this.dataset.code || '';
-                const text = code ? `${link} 提取码: ${code}` : link;
+                let text = title;
+                if (link) text += `\n${link}`;
+                if (code) text += `\n提取码: ${code}`;
                 copyToClipboard(text);
             });
         });
@@ -467,9 +589,14 @@ const MovieSearchPage = (function () {
                 searchResults = [];
                 filteredResults = [];
                 currentSource = 'all';
+                // 取消进行中的请求
+                if (abortController) abortController.abort();
                 updateContent();
             });
         }
+
+        // 绑定搜索源选择事件
+        bindSourceSelectorEvents();
 
         // 绑定初始动态事件
         bindDynamicEvents();

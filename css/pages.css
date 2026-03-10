@@ -53,6 +53,7 @@
 .feature-card:nth-child(2) { animation-delay: 0.1s; }
 .feature-card:nth-child(3) { animation-delay: 0.15s; }
 .feature-card:nth-child(4) { animation-delay: 0.2s; }
+.feature-card:nth-child(5) { animation-delay: 0.25s; }
 
 .feature-card .card-status {
     margin-top: var(--space-md);
@@ -360,7 +361,7 @@
 }
 
 /* ===========================================
-   Movie Search Page
+   Movie Search Page (Optimized)
    =========================================== */
 
 .movie-search-page {
@@ -496,7 +497,72 @@
     height: 18px;
 }
 
-/* --- Filter Bar --- */
+/* --- Source Selector (pre-search) --- */
+.movie-source-selector {
+    display: flex;
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+    justify-content: center;
+}
+
+.movie-source-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border-radius: var(--radius-full);
+    background: var(--bg-glass);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border-default);
+    font-size: var(--font-size-sm);
+    font-family: var(--font-family);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-base);
+    white-space: nowrap;
+    position: relative;
+    overflow: hidden;
+}
+
+.movie-source-option::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--gradient-primary);
+    opacity: 0;
+    transition: opacity var(--transition-base);
+    border-radius: inherit;
+}
+
+.movie-source-option:hover {
+    border-color: var(--border-glow);
+    color: var(--primary-light);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-glow);
+}
+
+.movie-source-option.active {
+    border-color: transparent;
+    color: #fff;
+    box-shadow: var(--shadow-glow);
+}
+
+.movie-source-option.active::before {
+    opacity: 1;
+}
+
+.movie-source-option svg,
+.movie-source-option .movie-source-option-label {
+    position: relative;
+    z-index: 1;
+}
+
+.movie-source-option-label {
+    font-weight: var(--font-weight-medium);
+}
+
+/* --- Filter Bar (post-search) --- */
 .movie-filter-bar {
     display: flex;
     gap: var(--space-sm);
@@ -618,63 +684,75 @@
     line-height: 1.6;
 }
 
-/* Loading State */
-.movie-state-loading {
-    gap: var(--space-lg);
+/* Welcome State - Animated Visual */
+.movie-welcome-visual {
+    position: relative;
+    margin-bottom: var(--space-lg);
 }
 
-.movie-state-loading .loading-dots {
-    transform: scale(1.5);
+.movie-welcome-orb {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 120px;
+    height: 120px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(108, 92, 231, 0.2) 0%, rgba(0, 206, 201, 0.08) 60%, transparent 80%);
+    animation: movieOrbPulse 3s ease-in-out infinite;
+    pointer-events: none;
 }
 
-/* Welcome State - Hot Searches */
-.movie-hot-searches {
-    margin-top: var(--space-xl);
+@keyframes movieOrbPulse {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; }
+    50% { transform: translate(-50%, -50%) scale(1.15); opacity: 1; }
+}
+
+.movie-welcome-visual .movie-state-icon {
+    margin-bottom: 0;
+    position: relative;
+    z-index: 1;
+}
+
+/* Loading State - Custom Spinner */
+.movie-loading-spinner {
+    position: relative;
+    width: 72px;
+    height: 72px;
+    margin-bottom: var(--space-lg);
+}
+
+.movie-spinner-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 3px solid var(--border-default);
+    border-top-color: var(--primary-light);
+    border-right-color: var(--accent);
+    animation: movieSpin 1s linear infinite;
+}
+
+@keyframes movieSpin {
+    to { transform: rotate(360deg); }
+}
+
+.movie-spinner-icon {
+    position: absolute;
+    inset: 0;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: var(--space-md);
-}
-
-.movie-hot-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: var(--font-size-sm);
-    color: var(--text-muted);
-    font-weight: var(--font-weight-medium);
-}
-
-.movie-hot-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-sm);
     justify-content: center;
-    max-width: 500px;
-}
-
-.movie-hot-tag {
-    display: inline-flex;
-    align-items: center;
-    padding: 8px 18px;
-    border-radius: var(--radius-full);
-    background: var(--bg-glass);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
-    border: 1px solid var(--border-default);
-    font-size: var(--font-size-sm);
-    font-family: var(--font-family);
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: all var(--transition-fast);
-}
-
-.movie-hot-tag:hover {
-    border-color: var(--border-glow);
     color: var(--primary-light);
-    background: var(--sidebar-active-bg);
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-glow);
+    animation: movieSpinnerPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes movieSpinnerPulse {
+    0%, 100% { opacity: 0.5; transform: scale(0.9); }
+    50% { opacity: 1; transform: scale(1); }
+}
+
+.movie-state-loading {
+    gap: var(--space-sm);
 }
 
 /* Retry Button in Error State */
@@ -875,6 +953,16 @@
         padding: 12px 40px 12px 44px;
     }
 
+    .movie-source-selector {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .movie-source-option {
+        padding: 8px 14px;
+        font-size: var(--font-size-xs);
+    }
+
     .movie-filter-bar {
         gap: 6px;
     }
@@ -931,14 +1019,20 @@
         font-size: var(--font-size-md);
     }
 
-    .movie-hot-tags {
-        max-width: 100%;
-    }
-
     .movie-toast {
         bottom: 16px;
         font-size: var(--font-size-xs);
         padding: 8px 16px;
+    }
+
+    .movie-loading-spinner {
+        width: 56px;
+        height: 56px;
+    }
+
+    .movie-welcome-orb {
+        width: 100px;
+        height: 100px;
     }
 }
 
@@ -963,5 +1057,11 @@
         min-width: 18px;
         height: 18px;
         font-size: 10px;
+    }
+
+    .movie-source-option {
+        padding: 6px 12px;
+        font-size: 11px;
+        gap: 5px;
     }
 }
