@@ -1,6 +1,6 @@
 /* ============================================
    796Helper - Movie Search Page Module
-   影视资源搜索页面（优化版）
+   影视资源搜索页面（v1.3.0 性能优化版）
    ============================================ */
 
 const MovieSearchPage = (function () {
@@ -9,17 +9,140 @@ const MovieSearchPage = (function () {
     // Workers API 地址
     const API_BASE = 'https://796helper-movie-search.YOUR_SUBDOMAIN.workers.dev';
 
-    // 搜索状态
+    // ==================== 缓存管理器 ====================
+    const CACHE_PREFIX = '796h-mc-';
+    const CACHE_TTL = 5 * 60 * 1000; // 5分钟
+    const CACHE_MAX = 20;
+
+    const CacheManager = {
+        _useStorage: (function () {
+            try {
+                const key = '__796h_test__';
+                sessionStorage.setItem(key, '1');
+                sessionStorage.removeItem(key);
+                return true;
+            } catch (e) {
+                return false;
+            }
+        })(),
+        _memoryCache: new Map(),
+
+        _getKey(keyword, source) {
+            return CACHE_PREFIX + keyword + '__' + source;
+        },
+
+        get(keyword, source) {
+            const key = this._getKey(keyword, source);
+            if (this._useStorage) {
+                try {
+                    const raw = sessionStorage.getItem(key);
+                    if (!raw) return null;
+                    const cached = JSON.parse(raw);
+                    if (Date.now() - cached.timestamp < CACHE_TTL) {
+                        return cached.data;
+                    }
+                    sessionStorage.removeItem(key);
+                    return null;
+                } catch (e) {
+                    return null;
+                }
+            } else {
+                const cached = this._memoryCache.get(key);
+                if (!cached) return null;
+                if (Date.now() - cached.timestamp < CACHE_TTL) {
+                    return cached.data;
+                }
+                this._memoryCache.delete(key);
+                return null;
+            }
+        },
+
+        set(keyword, source, data) {
+            const key = this._getKey(keyword, source);
+            const entry = { data, timestamp: Date.now() };
+            if (this._useStorage) {
+                try {
+                    sessionStorage.setItem(key, JSON.stringify(entry));
+                    this._enforceLimit();
+                } catch (e) {
+                    // 存储满时清理最旧的条目后重试
+                    this._cleanup();
+                    try { sessionStorage.setItem(key, JSON.stringify(entry)); } catch (e2) { /* 放弃 */ }
+                }
+            } else {
+                this._memoryCache.set(key, entry);
+                if (this._memoryCache.size > CACHE_MAX) {
+                    const firstKey = this._memoryCache.keys().next().value;
+                    this._memoryCache.delete(firstKey);
+                }
+            }
+        },
+
+        _enforceLimit() {
+            const keys = [];
+            for (let i = 0; i < sessionStorage.length; i++) {
+                const k = sessionStorage.key(i);
+                if (k && k.startsWith(CACHE_PREFIX)) {
+                    keys.push(k);
+                }
+            }
+            if (keys.length > CACHE_MAX) {
+                // 按时间戳排序，删除最旧的
+                const entries = keys.map(k => {
+                    try {
+                        const raw = sessionStorage.getItem(k);
+                        const parsed = JSON.parse(raw);
+                        return { key: k, timestamp: parsed.timestamp || 0 };
+                    } catch (e) {
+                        return { key: k, timestamp: 0 };
+                    }
+                });
+                entries.sort((a, b) => a.timestamp - b.timestamp);
+                const toRemove = entries.slice(0, entries.length - CACHE_MAX);
+                toRemove.forEach(e => sessionStorage.removeItem(e.key));
+            }
+        },
+
+        _cleanup() {
+            for (let i = sessionStorage.length - 1; i >= 0; i--) {
+                const k = sessionStorage.key(i);
+                if (k && k.startsWith(CACHE_PREFIX)) {
+                    try {
+                        const raw = sessionStorage.getItem(k);
+                        const parsed = JSON.parse(raw);
+                        if (Date.now() - parsed.timestamp >= CACHE_TTL) {
+                            sessionStorage.removeItem(k);
+                        }
+                    } catch (e) {
+                        sessionStorage.removeItem(k);
+                    }
+                }
+            }
+        }
+    };
+
+    // ==================== 防抖工具 ====================
+    function debounce(fn, delay) {
+        let timer = null;
+        return function (...args) {
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(() => { timer = null; fn.apply(this, args); }, delay);
+        };
+    }
+
+    // ==================== 搜索状态 ====================
     let searchResults = [];
     let filteredResults = [];
     let currentSource = 'all';
-    let currentSearchSource = 'all'; // 当前选择的搜索源（搜索前选择）
+    let currentSearchSource = 'all';
     let isLoading = false;
     let currentKeyword = '';
     let abortController = null;
-    let searchCache = new Map(); // 搜索结果缓存
+    let searchTimerInterval = null; // Loading 计时器
+    let searchStartTime = 0;
+    let delegatesAttached = false; // 事件委托是否已绑定
 
-    // 搜索源选项（搜索前选择）
+    // 搜索源选项
     const searchSourceOptions = [
         { key: 'all', label: '全部资源', icon: 'layers', desc: '搜索所有网盘' },
         { key: 'baidu', label: '百度网盘', icon: 'cloud', desc: '百度云资源' },
@@ -106,14 +229,11 @@ const MovieSearchPage = (function () {
     }
 
     function renderFilterTags() {
-        // 只展示有结果的筛选标签
-        const availableSources = new Set(searchResults.map(r => r.source));
         return filterTags.map(tag => {
             const active = currentSource === tag.key ? 'active' : '';
             const count = tag.key === 'all'
                 ? searchResults.length
                 : searchResults.filter(r => r.source === tag.key).length;
-            // 隐藏无结果的标签（除了"全部"）
             if (tag.key !== 'all' && count === 0) return '';
             const countHtml = `<span class="movie-filter-count">${count}</span>`;
             return `<button class="movie-filter-tag ${active}" data-source="${tag.key}">
@@ -152,7 +272,7 @@ const MovieSearchPage = (function () {
                 </div>
                 <p class="movie-state-title">正在搜索</p>
                 <p class="movie-state-desc">在${sourceLabel}中搜索 "${escapeHtml(currentKeyword)}"...</p>
-                <p class="movie-state-desc movie-search-timer" style="font-size:12px;color:var(--text-muted);margin-top:4px;">超过30秒将自动超时</p>
+                <p class="movie-state-desc movie-search-timer" id="movieSearchTimer" style="font-size:12px;color:var(--text-muted);margin-top:4px;">已耗时 0 秒</p>
             </div>
         `;
     }
@@ -261,11 +381,81 @@ const MovieSearchPage = (function () {
         }
     }
 
-    function updateContent() {
+    // ==================== Loading 计时器 ====================
+    function startSearchTimer() {
+        stopSearchTimer();
+        searchStartTime = Date.now();
+        searchTimerInterval = setInterval(function () {
+            const el = document.getElementById('movieSearchTimer');
+            if (el) {
+                const elapsed = Math.floor((Date.now() - searchStartTime) / 1000);
+                el.textContent = '已耗时 ' + elapsed + ' 秒';
+            }
+        }, 1000);
+    }
+
+    function stopSearchTimer() {
+        if (searchTimerInterval) {
+            clearInterval(searchTimerInterval);
+            searchTimerInterval = null;
+        }
+    }
+
+    // ==================== 搜索按钮状态 ====================
+    function setSearchBtnLoading(loading) {
+        const btn = document.getElementById('movieSearchBtn');
+        if (!btn) return;
+        if (loading) {
+            btn.disabled = true;
+            btn.innerHTML = '<i data-lucide="loader" style="animation:spin 1s linear infinite;"></i> <span>搜索中</span>';
+        } else {
+            btn.disabled = false;
+            btn.innerHTML = '<i data-lucide="search"></i> <span>搜索</span>';
+        }
+        if (window.lucide) lucide.createIcons({ attrs: {} });
+    }
+
+    // ==================== 内容更新（优化版） ====================
+    function updateContent(filterOnly) {
         const contentArea = document.getElementById('movieContentArea');
         const filterBar = document.getElementById('movieFilterBar');
         if (!contentArea) return;
 
+        if (filterOnly && searchResults.length > 0) {
+            // 筛选切换：只更新结果列表和筛选栏，不重写整个内容区
+            const resultsList = contentArea.querySelector('.movie-results-list');
+            const resultsHeader = contentArea.querySelector('.movie-results-header');
+            if (resultsList && resultsHeader) {
+                if (filteredResults.length === 0) {
+                    contentArea.innerHTML = `
+                        <div class="movie-state movie-state-empty">
+                            <div class="movie-state-icon">
+                                <i data-lucide="filter-x"></i>
+                            </div>
+                            <h3 class="movie-state-title">该来源暂无结果</h3>
+                            <p class="movie-state-desc">尝试选择"全部"来源查看所有资源</p>
+                        </div>
+                    `;
+                    if (window.lucide) lucide.createIcons();
+                } else {
+                    resultsHeader.innerHTML = `<span>找到 <strong>${filteredResults.length}</strong> 个资源</span>`;
+                    resultsList.innerHTML = filteredResults.map((item, i) => renderResultCard(item, i)).join('');
+                    if (window.lucide) lucide.createIcons();
+                }
+            } else {
+                // fallback: 全量更新
+                contentArea.innerHTML = renderResults();
+                if (window.lucide) lucide.createIcons();
+            }
+            // 更新筛选栏
+            if (filterBar) {
+                filterBar.innerHTML = renderFilterTags();
+                if (window.lucide) lucide.createIcons();
+            }
+            return;
+        }
+
+        // 全量更新
         if (isLoading) {
             contentArea.innerHTML = renderLoadingState();
         } else if (searchResults.length > 0) {
@@ -282,11 +472,7 @@ const MovieSearchPage = (function () {
             filterBar.classList.toggle('hidden', searchResults.length === 0);
         }
 
-        // 重新初始化图标
         if (window.lucide) lucide.createIcons();
-
-        // 重新绑定动态元素事件
-        bindDynamicEvents();
     }
 
     function updateSourceSelector() {
@@ -294,16 +480,13 @@ const MovieSearchPage = (function () {
         if (selector) {
             selector.innerHTML = renderSearchSourceSelector();
             if (window.lucide) lucide.createIcons();
-            bindSourceSelectorEvents();
         }
     }
 
-    function getCacheKey(keyword, source) {
-        return `${keyword}__${source}`;
-    }
-
+    // ==================== 核心搜索流程 ====================
     async function performSearch(keyword) {
         if (!keyword || keyword.trim().length === 0) return;
+        if (isLoading) return; // 防止重复搜索
 
         currentKeyword = keyword.trim();
 
@@ -313,19 +496,14 @@ const MovieSearchPage = (function () {
         }
 
         // 检查缓存
-        const cacheKey = getCacheKey(currentKeyword, currentSearchSource);
-        if (searchCache.has(cacheKey)) {
-            const cached = searchCache.get(cacheKey);
-            if (Date.now() - cached.timestamp < 5 * 60 * 1000) { // 5分钟缓存
-                searchResults = cached.data;
-                filteredResults = [...searchResults];
-                currentSource = 'all';
-                isLoading = false;
-                updateContent();
-                return;
-            } else {
-                searchCache.delete(cacheKey);
-            }
+        const cachedData = CacheManager.get(currentKeyword, currentSearchSource);
+        if (cachedData) {
+            searchResults = cachedData;
+            filteredResults = [...searchResults];
+            currentSource = 'all';
+            isLoading = false;
+            updateContent();
+            return;
         }
 
         isLoading = true;
@@ -333,6 +511,8 @@ const MovieSearchPage = (function () {
         filteredResults = [];
         currentSource = 'all';
         updateContent();
+        setSearchBtnLoading(true);
+        startSearchTimer();
 
         // 更新输入框
         const input = document.getElementById('movieSearchInput');
@@ -343,7 +523,6 @@ const MovieSearchPage = (function () {
         abortController = new AbortController();
         const signal = abortController.signal;
 
-        // 30秒超时定时器
         const SEARCH_TIMEOUT = 30000;
         let timeoutId = null;
 
@@ -351,7 +530,6 @@ const MovieSearchPage = (function () {
             const sourceParam = currentSearchSource !== 'all' ? `&source=${currentSearchSource}` : '';
             const fetchUrl = `${API_BASE}/api/search?keyword=${encodeURIComponent(currentKeyword)}${sourceParam}`;
 
-            // 使用 Promise.race 实现超时监测
             const fetchPromise = fetch(fetchUrl, { signal, headers: { 'Accept': 'application/json' } });
             const timeoutPromise = new Promise((_, reject) => {
                 timeoutId = setTimeout(() => {
@@ -372,49 +550,55 @@ const MovieSearchPage = (function () {
                 searchResults = data.data || [];
                 filteredResults = [...searchResults];
                 // 缓存结果
-                searchCache.set(cacheKey, { data: searchResults, timestamp: Date.now() });
-                // 清理过期缓存（保留最近20条）
-                if (searchCache.size > 20) {
-                    const firstKey = searchCache.keys().next().value;
-                    searchCache.delete(firstKey);
-                }
+                CacheManager.set(currentKeyword, currentSearchSource, searchResults);
             } else {
                 searchResults = [];
                 filteredResults = [];
                 isLoading = false;
+                stopSearchTimer();
+                setSearchBtnLoading(false);
                 const contentArea = document.getElementById('movieContentArea');
                 if (contentArea) {
                     contentArea.innerHTML = renderErrorState(data.error || '搜索失败');
                     if (window.lucide) lucide.createIcons();
-                    bindDynamicEvents();
                 }
                 return;
             }
         } catch (err) {
             if (timeoutId) clearTimeout(timeoutId);
-            if (err.name === 'AbortError') return; // 请求被取消，不处理
-            // 超时错误
+            if (err.name === 'AbortError') {
+                stopSearchTimer();
+                setSearchBtnLoading(false);
+                return;
+            }
             if (err.message === 'SEARCH_TIMEOUT') {
                 isLoading = false;
+                stopSearchTimer();
+                setSearchBtnLoading(false);
                 const contentArea = document.getElementById('movieContentArea');
                 if (contentArea) {
                     contentArea.innerHTML = renderErrorState('搜索超时，请检查网络后重试（已超过30秒）');
                     if (window.lucide) lucide.createIcons();
-                    bindDynamicEvents();
                 }
                 return;
             }
-            // 网络错误 - 使用模拟数据进行演示
             console.warn('API 请求失败，使用演示数据:', err.message);
             searchResults = generateDemoData(currentKeyword);
             filteredResults = [...searchResults];
         }
 
         isLoading = false;
+        stopSearchTimer();
+        setSearchBtnLoading(false);
         updateContent();
     }
 
-    // 演示数据生成（API 不可用时）
+    // 防抖版搜索（用于 Enter 键和搜索源切换的自动重搜）
+    const debouncedSearch = debounce(function (keyword) {
+        performSearch(keyword);
+    }, 300);
+
+    // 演示数据生成
     function generateDemoData(keyword) {
         const sources = currentSearchSource === 'all'
             ? [
@@ -498,82 +682,85 @@ const MovieSearchPage = (function () {
         }, 2000);
     }
 
-    function bindSourceSelectorEvents() {
-        document.querySelectorAll('.movie-source-option').forEach(opt => {
-            opt.addEventListener('click', function () {
-                const source = this.dataset.searchSource;
-                if (source === currentSearchSource) return;
-                currentSearchSource = source;
-                updateSourceSelector();
-                // 如果已有搜索关键词，自动重新搜索
-                if (currentKeyword) {
-                    performSearch(currentKeyword);
-                }
-            });
-        });
-    }
-
-    function bindDynamicEvents() {
+    // ==================== 事件委托 ====================
+    function handleContentAreaClick(e) {
         // 复制按钮
-        document.querySelectorAll('.movie-result-copy-btn').forEach(btn => {
-            btn.addEventListener('click', function () {
-                const title = this.dataset.title || '';
-                const link = this.dataset.link || '';
-                const code = this.dataset.code || '';
-                let text = title;
-                if (link) text += `\n${link}`;
-                if (code) text += `\n提取码: ${code}`;
-                copyToClipboard(text);
-            });
-        });
-
-        // 筛选标签
-        document.querySelectorAll('.movie-filter-tag').forEach(tag => {
-            tag.addEventListener('click', function () {
-                const source = this.dataset.source;
-                filterBySource(source);
-                updateContent();
-            });
-        });
+        const copyBtn = e.target.closest('.movie-result-copy-btn');
+        if (copyBtn) {
+            const title = copyBtn.dataset.title || '';
+            const link = copyBtn.dataset.link || '';
+            const code = copyBtn.dataset.code || '';
+            let text = title;
+            if (link) text += '\n' + link;
+            if (code) text += '\n提取码: ' + code;
+            copyToClipboard(text);
+            return;
+        }
 
         // 重试按钮
-        const retryBtn = document.querySelector('.movie-retry-btn');
+        const retryBtn = e.target.closest('.movie-retry-btn');
         if (retryBtn) {
-            retryBtn.addEventListener('click', function () {
-                if (currentKeyword) performSearch(currentKeyword);
-            });
+            if (currentKeyword) performSearch(currentKeyword);
+            return;
         }
     }
 
+    function handleFilterBarClick(e) {
+        const tag = e.target.closest('.movie-filter-tag');
+        if (tag) {
+            const source = tag.dataset.source;
+            if (source && source !== currentSource) {
+                filterBySource(source);
+                updateContent(true); // 筛选模式：局部更新
+            }
+        }
+    }
+
+    function handleSourceSelectorClick(e) {
+        const opt = e.target.closest('.movie-source-option');
+        if (opt) {
+            const source = opt.dataset.searchSource;
+            if (source && source !== currentSearchSource) {
+                currentSearchSource = source;
+                updateSourceSelector();
+                if (currentKeyword) {
+                    debouncedSearch(currentKeyword);
+                }
+            }
+        }
+    }
+
+    // ==================== 初始化 ====================
     function init() {
         const searchInput = document.getElementById('movieSearchInput');
         const searchBtn = document.getElementById('movieSearchBtn');
         const clearBtn = document.getElementById('movieSearchClear');
+        const contentArea = document.getElementById('movieContentArea');
+        const filterBar = document.getElementById('movieFilterBar');
+        const sourceSelector = document.getElementById('movieSourceSelector');
 
-        // 搜索按钮点击
+        // 搜索按钮点击（即时触发，不防抖）
         if (searchBtn) {
             searchBtn.addEventListener('click', function () {
                 if (searchInput) performSearch(searchInput.value);
             });
         }
 
-        // Enter 键搜索
+        // Enter 键搜索（防抖）
         if (searchInput) {
             searchInput.addEventListener('keydown', function (e) {
                 if (e.key === 'Enter') {
                     e.preventDefault();
-                    performSearch(this.value);
+                    debouncedSearch(this.value);
                 }
             });
 
-            // 输入时显示/隐藏清空按钮
             searchInput.addEventListener('input', function () {
                 if (clearBtn) {
                     clearBtn.classList.toggle('hidden', this.value.length === 0);
                 }
             });
 
-            // 自动聚焦
             searchInput.focus();
         }
 
@@ -589,17 +776,21 @@ const MovieSearchPage = (function () {
                 searchResults = [];
                 filteredResults = [];
                 currentSource = 'all';
-                // 取消进行中的请求
                 if (abortController) abortController.abort();
+                isLoading = false;
+                stopSearchTimer();
+                setSearchBtnLoading(false);
                 updateContent();
             });
         }
 
-        // 绑定搜索源选择事件
-        bindSourceSelectorEvents();
-
-        // 绑定初始动态事件
-        bindDynamicEvents();
+        // 事件委托绑定（只绑定一次，永久生效）
+        if (!delegatesAttached) {
+            if (contentArea) contentArea.addEventListener('click', handleContentAreaClick);
+            if (filterBar) filterBar.addEventListener('click', handleFilterBarClick);
+            if (sourceSelector) sourceSelector.addEventListener('click', handleSourceSelectorClick);
+            delegatesAttached = true;
+        }
     }
 
     return { title, render, init };
