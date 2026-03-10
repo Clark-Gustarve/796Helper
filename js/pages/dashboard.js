@@ -44,6 +44,17 @@ const DashboardPage = (function () {
                         </div>
                     </a>
 
+                    <a href="#movie-search" class="card card-clickable feature-card">
+                        <div class="card-icon" style="background: linear-gradient(135deg, rgba(155,89,182,0.15), rgba(162,155,254,0.08));">
+                            <i data-lucide="film"></i>
+                        </div>
+                        <div class="card-title">影视搜索</div>
+                        <div class="card-desc">搜索百度网盘、夸克网盘、迅雷等平台的影视资源</div>
+                        <div class="card-status">
+                            <span class="badge badge-success">可用</span>
+                        </div>
+                    </a>
+
                     <div class="card feature-card">
                         <div class="card-icon" style="background: linear-gradient(135deg, rgba(0,206,201,0.15), rgba(85,239,196,0.08));">
                             <i data-lucide="check-square"></i>

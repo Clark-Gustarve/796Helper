@@ -14,6 +14,7 @@
         // 3. Register page routes
         Router.register('dashboard', DashboardPage);
         Router.register('chat', ChatPage);
+        Router.register('movie-search', MovieSearchPage);
 
         // 4. Initialize router (triggers first page render)
         Router.init();
