@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>796Helper - AI 个人助手</title>
+    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="css/variables.css">
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/layout.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/pages.css">
+</head>
+<body>
+    <div class="app">
+        <!-- Sidebar Overlay (Mobile) -->
+        <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <!-- Brand -->
+            <div class="sidebar-brand">
+                <div class="brand-icon">
+                    <i data-lucide="bot"></i>
+                </div>
+                <span class="brand-text text-gradient">796Helper</span>
+            </div>
+
+            <!-- Navigation -->
+            <nav class="sidebar-nav" id="sidebarNav">
+                <div class="nav-section-title">主菜单</div>
+                <a class="nav-item" data-route="chat" href="#chat">
+                    <span class="nav-icon"><i data-lucide="message-square"></i></span>
+                    <span class="nav-label">AI 助手</span>
+                </a>
+                <a class="nav-item" data-route="dashboard" href="#dashboard">
+                    <span class="nav-icon"><i data-lucide="layout-dashboard"></i></span>
+                    <span class="nav-label">仪表盘</span>
+                </a>
+
+                <div class="nav-section-title" style="margin-top: var(--space-md);">工具</div>
+                <a class="nav-item" data-route="todo" href="#todo">
+                    <span class="nav-icon"><i data-lucide="check-square"></i></span>
+                    <span class="nav-label">待办事项</span>
+                    <span class="nav-badge badge-soon">即将推出</span>
+                </a>
+                <a class="nav-item" data-route="notes" href="#notes">
+                    <span class="nav-icon"><i data-lucide="file-text"></i></span>
+                    <span class="nav-label">笔记</span>
+                    <span class="nav-badge badge-soon">即将推出</span>
+                </a>
+
+                <div class="nav-section-title" style="margin-top: var(--space-md);">其他</div>
+                <a class="nav-item" data-route="settings" href="#settings">
+                    <span class="nav-icon"><i data-lucide="settings"></i></span>
+                    <span class="nav-label">设置</span>
+                    <span class="nav-badge badge-soon">即将推出</span>
+                </a>
+            </nav>
+
+            <!-- Sidebar Footer -->
+            <div class="sidebar-footer">
+                <button class="sidebar-toggle-btn" id="sidebarToggle" title="折叠侧边栏">
+                    <i data-lucide="panel-left-close"></i>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="header">
+                <div class="header-left">
+                    <button class="mobile-menu-btn" id="mobileMenuBtn" title="打开菜单">
+                        <i data-lucide="menu"></i>
+                    </button>
+                    <h1 class="header-title" id="headerTitle">AI 助手</h1>
+                </div>
+                <div class="header-right">
+                    <button class="theme-toggle" id="themeToggle" title="切换主题">
+                        <i data-lucide="sun" class="icon-sun"></i>
+                        <i data-lucide="moon" class="icon-moon"></i>
+                    </button>
+                    <div class="user-avatar" title="用户">
+                        U
+                    </div>
+                </div>
+            </header>
+
+            <!-- Page Container -->
+            <div class="page-container" id="pageContainer">
+                <!-- Pages will be rendered here by router -->
+            </div>
+        </main>
+    </div>
+
+    <!-- JavaScript Modules -->
+    <script src="js/router.js"></script>
+    <script src="js/theme.js"></script>
+    <script src="js/sidebar.js"></script>
+    <script src="js/pages/dashboard.js"></script>
+    <script src="js/pages/chat.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

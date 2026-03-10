@@ -1,0 +1,181 @@
+/* ============================================
+   796Helper - CSS Variables / Design Tokens
+   ============================================ */
+
+/* --- Dark Theme (Default) --- */
+:root,
+[data-theme="dark"] {
+    /* Primary */
+    --primary: #6C5CE7;
+    --primary-light: #A29BFE;
+    --primary-dark: #5A4BD1;
+    --accent: #00CEC9;
+    --accent-light: #55EFC4;
+
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, #6C5CE7, #A29BFE);
+    --gradient-accent: linear-gradient(135deg, #6C5CE7, #00CEC9);
+    --gradient-subtle: linear-gradient(135deg, rgba(108, 92, 231, 0.1), rgba(0, 206, 201, 0.05));
+
+    /* Background */
+    --bg-base: #0F0F1A;
+    --bg-surface: #1A1A2E;
+    --bg-elevated: #16213E;
+    --bg-overlay: rgba(15, 15, 26, 0.85);
+    --bg-glass: rgba(26, 26, 46, 0.6);
+    --bg-glass-hover: rgba(26, 26, 46, 0.8);
+    --bg-input: rgba(22, 33, 62, 0.5);
+
+    /* Text */
+    --text-primary: #EAEAEA;
+    --text-secondary: #A0A0B8;
+    --text-muted: #636E82;
+    --text-inverse: #0F0F1A;
+
+    /* Border */
+    --border-default: rgba(255, 255, 255, 0.06);
+    --border-light: rgba(255, 255, 255, 0.1);
+    --border-focus: rgba(108, 92, 231, 0.5);
+    --border-glow: rgba(108, 92, 231, 0.3);
+
+    /* Shadow */
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+    --shadow-glow: 0 0 20px rgba(108, 92, 231, 0.15);
+    --shadow-glow-strong: 0 0 30px rgba(108, 92, 231, 0.3);
+
+    /* Functional */
+    --success: #00B894;
+    --error: #FF7675;
+    --warning: #FDCB6E;
+    --info: #74B9FF;
+
+    /* Sidebar */
+    --sidebar-bg: rgba(15, 15, 26, 0.95);
+    --sidebar-active-bg: rgba(108, 92, 231, 0.12);
+    --sidebar-hover-bg: rgba(255, 255, 255, 0.04);
+    --sidebar-indicator: #6C5CE7;
+
+    /* Scrollbar */
+    --scrollbar-track: transparent;
+    --scrollbar-thumb: rgba(255, 255, 255, 0.1);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.2);
+}
+
+/* --- Light Theme --- */
+[data-theme="light"] {
+    /* Primary */
+    --primary: #6C5CE7;
+    --primary-light: #A29BFE;
+    --primary-dark: #5A4BD1;
+    --accent: #00CEC9;
+    --accent-light: #55EFC4;
+
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, #6C5CE7, #A29BFE);
+    --gradient-accent: linear-gradient(135deg, #6C5CE7, #00CEC9);
+    --gradient-subtle: linear-gradient(135deg, rgba(108, 92, 231, 0.05), rgba(0, 206, 201, 0.03));
+
+    /* Background */
+    --bg-base: #F8F9FE;
+    --bg-surface: #FFFFFF;
+    --bg-elevated: #FFFFFF;
+    --bg-overlay: rgba(248, 249, 254, 0.9);
+    --bg-glass: rgba(255, 255, 255, 0.7);
+    --bg-glass-hover: rgba(255, 255, 255, 0.85);
+    --bg-input: rgba(248, 249, 254, 0.8);
+
+    /* Text */
+    --text-primary: #2D3436;
+    --text-secondary: #636E72;
+    --text-muted: #A0A0B8;
+    --text-inverse: #FFFFFF;
+
+    /* Border */
+    --border-default: rgba(0, 0, 0, 0.06);
+    --border-light: rgba(0, 0, 0, 0.1);
+    --border-focus: rgba(108, 92, 231, 0.4);
+    --border-glow: rgba(108, 92, 231, 0.2);
+
+    /* Shadow */
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
+    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
+    --shadow-glow: 0 0 20px rgba(108, 92, 231, 0.08);
+    --shadow-glow-strong: 0 0 30px rgba(108, 92, 231, 0.15);
+
+    /* Functional */
+    --success: #00B894;
+    --error: #FF7675;
+    --warning: #FDCB6E;
+    --info: #74B9FF;
+
+    /* Sidebar */
+    --sidebar-bg: rgba(255, 255, 255, 0.95);
+    --sidebar-active-bg: rgba(108, 92, 231, 0.08);
+    --sidebar-hover-bg: rgba(0, 0, 0, 0.03);
+    --sidebar-indicator: #6C5CE7;
+
+    /* Scrollbar */
+    --scrollbar-track: transparent;
+    --scrollbar-thumb: rgba(0, 0, 0, 0.12);
+    --scrollbar-thumb-hover: rgba(0, 0, 0, 0.2);
+}
+
+/* --- Global Design Tokens --- */
+:root {
+    /* Spacing */
+    --space-xs: 4px;
+    --space-sm: 8px;
+    --space-md: 16px;
+    --space-lg: 24px;
+    --space-xl: 32px;
+    --space-2xl: 48px;
+
+    /* Border Radius */
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --radius-full: 9999px;
+
+    /* Transition */
+    --transition-fast: 0.15s ease;
+    --transition-base: 0.3s ease;
+    --transition-slow: 0.5s ease;
+
+    /* Typography */
+    --font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+
+    --font-size-xs: 12px;
+    --font-size-sm: 13px;
+    --font-size-base: 14px;
+    --font-size-md: 16px;
+    --font-size-lg: 18px;
+    --font-size-xl: 24px;
+    --font-size-2xl: 28px;
+    --font-size-3xl: 36px;
+
+    --font-weight-normal: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 700;
+
+    /* Layout */
+    --sidebar-width: 240px;
+    --sidebar-collapsed-width: 68px;
+    --header-height: 60px;
+
+    /* Z-index */
+    --z-sidebar: 100;
+    --z-overlay: 90;
+    --z-header: 80;
+    --z-dropdown: 110;
+    --z-modal: 120;
+
+    /* Glassmorphism */
+    --glass-blur: blur(20px);
+    --glass-blur-heavy: blur(40px);
+}
