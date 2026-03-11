@@ -6,7 +6,22 @@
 
 ---
 
+## [v2.0.5] - 2026-03-11
+
+### 调整
+- **影视搜索改为 PanSearch 直链优先**：Worker 不再并发请求或合并 `UP云搜` 结果，`/api/search` 只返回通过 `PanSearch` 解析出的真实网盘链接
+- **前端兜底入口收敛**：代理不可达或超时时，结果区只保留 `PanSearch` 搜索页入口，不再生成 `UP云搜` 搜索页卡片
+- **旧缓存失效处理**：前端缓存 schema 升级到 `2.0.5`，避免历史 `UP云搜` 搜索页结果继续命中缓存
+
+### 验证
+- 已通过 `js/pages/movie-search.js` 与 `worker/index.js` 的静态复核
+- 已通过针对修改文件的 linter 检查；`js/pages/movie-search.js` 仅保留原有 `document.execCommand` 弃用提示
+- 当前为代码层调整，未在本地完成外网实时搜索验收
+
+---
+
 ## [v2.0.4] - 2026-03-11
+
 
 ### 修复
 - **影视搜索单一代理失效即整体失败**：前端搜索改为优先读取 `window.__796HELPER_CONFIG__.movieSearch.apiBases`，按顺序轮询代理地址；默认仍兼容既有 `workers.dev` 地址

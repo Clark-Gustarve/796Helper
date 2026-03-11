@@ -1,6 +1,6 @@
 /* ============================================
    796Helper - Movie Search Page Module
-   影视资源搜索页面（v2.0.4 双搜索源版）
+   影视资源搜索页面（v2.0.5 PanSearch 直链优先版）
    ============================================ */
 
 const MovieSearchPage = (function () {
@@ -50,7 +50,7 @@ const MovieSearchPage = (function () {
     }
 
     // ==================== 缓存管理器 ====================
-    const CACHE_SCHEMA_VERSION = '2.0.2';
+    const CACHE_SCHEMA_VERSION = '2.0.5';
 
     const CACHE_PREFIX_BASE = '796h-mc-';
     const CACHE_PREFIX = `${CACHE_PREFIX_BASE}${CACHE_SCHEMA_VERSION}-`;
@@ -239,13 +239,14 @@ const MovieSearchPage = (function () {
     };
 
     const sourceSearchParams = {
-        all: { panChannel: 'all', pansearch: '' },
-        baidu: { panChannel: 'baidu', pansearch: 'baidu' },
-        quark: { panChannel: 'kuake', pansearch: 'quark' },
-        ali: { panChannel: 'ali', pansearch: 'aliyun' },
-        thunder: { panChannel: 'xunlei', pansearch: 'xunlei' },
-        tianyi: { panChannel: 'tianyi', pansearch: '' }
+        all: { pansearch: '' },
+        baidu: { pansearch: 'baidu' },
+        quark: { pansearch: 'quark' },
+        ali: { pansearch: 'aliyun' },
+        thunder: { pansearch: 'xunlei' },
+        tianyi: { pansearch: '' }
     };
+
 
     function getSourceStyle(source) {
 
@@ -703,14 +704,7 @@ const MovieSearchPage = (function () {
                 code: '',
                 time: '站外搜索'
             },
-            {
-                title: `${keyword} - 打开 UP云搜 搜索结果页`,
-                source: fallbackSource,
-                sourceLabel: fallbackLabel,
-                link: `https://www.upyunso.com/search?keyword=${encodedKeyword}&pan_channel=${sourceConfig.panChannel}`,
-                code: '',
-                time: '站外搜索'
-            }
+
         ];
     }
 
@@ -777,7 +771,8 @@ const MovieSearchPage = (function () {
             } else if (outcome.enableExternalFallback !== false) {
                 searchResults = generateFallbackResults(currentKeyword, currentSearchSource);
                 filteredResults = [...searchResults];
-                setSearchNotice('fallback', `${outcome.error || '搜索代理暂时不可用'}，已切换为站外搜索入口，可直接打开搜索结果页。`);
+                setSearchNotice('fallback', `${outcome.error || '搜索代理暂时不可用'}，已切换为 PanSearch 搜索页，可继续尝试获取真实网盘链接。`);
+
             } else {
                 searchResults = [];
                 filteredResults = [];
@@ -800,7 +795,8 @@ const MovieSearchPage = (function () {
             }
             searchResults = generateFallbackResults(currentKeyword, currentSearchSource);
             filteredResults = [...searchResults];
-            setSearchNotice('fallback', `${normalizeRequestError(err)}，已切换为站外搜索入口，可直接打开搜索结果页。`);
+            setSearchNotice('fallback', `${normalizeRequestError(err)}，已切换为 PanSearch 搜索页，可继续尝试获取真实网盘链接。`);
+
         }
 
         isLoading = false;
