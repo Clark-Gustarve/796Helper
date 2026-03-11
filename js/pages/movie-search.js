@@ -1,6 +1,6 @@
 /* ============================================
    796Helper - Movie Search Page Module
-   影视资源搜索页面（v1.5.0 链接修复版）
+   影视资源搜索页面（v2.0.2 双搜索源版）
    ============================================ */
 
 const MovieSearchPage = (function () {
@@ -10,7 +10,10 @@ const MovieSearchPage = (function () {
     const API_BASE = 'https://796helper-movie-search.clown8379.workers.dev';
 
     // ==================== 缓存管理器 ====================
-    const CACHE_PREFIX = '796h-mc-';
+    const CACHE_SCHEMA_VERSION = '2.0.2';
+    const CACHE_PREFIX_BASE = '796h-mc-';
+    const CACHE_PREFIX = `${CACHE_PREFIX_BASE}${CACHE_SCHEMA_VERSION}-`;
+    const CACHE_VERSION_KEY = `${CACHE_PREFIX_BASE}schema-version`;
     const CACHE_TTL = 5 * 60 * 1000; // 5分钟
     const CACHE_MAX = 20;
 
@@ -26,6 +29,28 @@ const MovieSearchPage = (function () {
             }
         })(),
         _memoryCache: new Map(),
+        _storageReady: false,
+
+        _ensureStorageReady() {
+            if (!this._useStorage || this._storageReady) return;
+            try {
+                const currentVersion = sessionStorage.getItem(CACHE_VERSION_KEY);
+                if (currentVersion !== CACHE_SCHEMA_VERSION) {
+                    const keysToRemove = [];
+                    for (let i = 0; i < sessionStorage.length; i++) {
+                        const key = sessionStorage.key(i);
+                        if (key && key.startsWith(CACHE_PREFIX_BASE)) {
+                            keysToRemove.push(key);
+                        }
+                    }
+                    keysToRemove.forEach(key => sessionStorage.removeItem(key));
+                    sessionStorage.setItem(CACHE_VERSION_KEY, CACHE_SCHEMA_VERSION);
+                }
+            } catch (e) {
+                // 忽略存储异常，继续使用当前存储状态
+            }
+            this._storageReady = true;
+        },
 
         _getKey(keyword, source) {
             return CACHE_PREFIX + keyword + '__' + source;
@@ -34,6 +59,7 @@ const MovieSearchPage = (function () {
         get(keyword, source) {
             const key = this._getKey(keyword, source);
             if (this._useStorage) {
+                this._ensureStorageReady();
                 try {
                     const raw = sessionStorage.getItem(key);
                     if (!raw) return null;
@@ -61,6 +87,7 @@ const MovieSearchPage = (function () {
             const key = this._getKey(keyword, source);
             const entry = { data, timestamp: Date.now() };
             if (this._useStorage) {
+                this._ensureStorageReady();
                 try {
                     sessionStorage.setItem(key, JSON.stringify(entry));
                     this._enforceLimit();
@@ -121,6 +148,7 @@ const MovieSearchPage = (function () {
         }
     };
 
+
     // ==================== 防抖工具 ====================
     function debounce(fn, delay) {
         let timer = null;
@@ -140,7 +168,7 @@ const MovieSearchPage = (function () {
     let abortController = null;
     let searchTimerInterval = null; // Loading 计时器
     let searchStartTime = 0;
-    let delegatesAttached = false; // 事件委托是否已绑定
+
 
     // 搜索源选项
     const searchSourceOptions = [
@@ -216,7 +244,7 @@ const MovieSearchPage = (function () {
                     ${item.link ? `<a href="${escapeHtml(item.link)}" target="_blank" rel="noopener noreferrer" class="movie-result-link-btn" title="${isDirectPanLink(item.link) ? '打开网盘链接' : '前往搜索引擎查看资源'}">
                         <i data-lucide="${isDirectPanLink(item.link) ? 'external-link' : 'search'}"></i>
                     </a>` : ''}
-                    <button class="movie-result-copy-btn" data-title="${escapeHtml(item.title)}" data-link="${escapeHtml(item.link)}" data-code="${escapeHtml(item.code)}" title="复制资源信息">
+                    <button class="movie-result-copy-btn" data-title="${escapeHtml(item.title)}" data-link="${escapeHtml(item.link)}" data-code="${escapeHtml(item.code)}" title="${isDirectPanLink(item.link) ? '复制网盘链接' : '复制资源信息'}">
                         <i data-lucide="copy"></i>
                     </button>
                 </div>
@@ -706,9 +734,17 @@ const MovieSearchPage = (function () {
             const title = copyBtn.dataset.title || '';
             const link = copyBtn.dataset.link || '';
             const code = copyBtn.dataset.code || '';
-            let text = title;
-            if (link) text += '\n' + link;
-            if (code) text += '\n提取码: ' + code;
+            let text = '';
+            if (isDirectPanLink(link)) {
+                // 网盘直链：直接复制链接（+ 提取码）
+                text = link;
+                if (code) text += '\n提取码: ' + code;
+            } else {
+                // 搜索页链接：复制标题 + 链接
+                text = title;
+                if (link) text += '\n' + link;
+                if (code) text += '\n提取码: ' + code;
+            }
             copyToClipboard(text);
             return;
         }
@@ -800,13 +836,10 @@ const MovieSearchPage = (function () {
             });
         }
 
-        // 事件委托绑定（只绑定一次，永久生效）
-        if (!delegatesAttached) {
-            if (contentArea) contentArea.addEventListener('click', handleContentAreaClick);
-            if (filterBar) filterBar.addEventListener('click', handleFilterBarClick);
-            if (sourceSelector) sourceSelector.addEventListener('click', handleSourceSelectorClick);
-            delegatesAttached = true;
-        }
+        // 事件委托绑定（每次 init 重新绑定，因为路由切换会重建 DOM）
+        if (contentArea) contentArea.addEventListener('click', handleContentAreaClick);
+        if (filterBar) filterBar.addEventListener('click', handleFilterBarClick);
+        if (sourceSelector) sourceSelector.addEventListener('click', handleSourceSelectorClick);
     }
 
     return { title, render, init };
