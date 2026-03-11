@@ -108,8 +108,19 @@
         </main>
     </div>
 
+    <script>
+        window.__796HELPER_CONFIG__ = window.__796HELPER_CONFIG__ || {};
+        window.__796HELPER_CONFIG__.movieSearch = Object.assign({
+            apiBases: [
+                'https://796helper-movie-search.clown8379.workers.dev'
+            ],
+            enableExternalFallback: true
+        }, window.__796HELPER_CONFIG__.movieSearch || {});
+    </script>
+
     <!-- JavaScript Modules -->
     <script src="js/router.js"></script>
+
     <script src="js/theme.js"></script>
     <script src="js/sidebar.js"></script>
     <script src="js/pages/dashboard.js"></script>

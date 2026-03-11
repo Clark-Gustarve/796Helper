@@ -1,16 +1,57 @@
 /* ============================================
    796Helper - Movie Search Page Module
-   影视资源搜索页面（v2.0.2 双搜索源版）
+   影视资源搜索页面（v2.0.4 双搜索源版）
    ============================================ */
 
 const MovieSearchPage = (function () {
     const title = '影视搜索';
 
-    // Workers API 地址
-    const API_BASE = 'https://796helper-movie-search.clown8379.workers.dev';
+    const DEFAULT_API_BASES = [
+        'https://796helper-movie-search.clown8379.workers.dev'
+    ];
+    const SEARCH_TIMEOUT = 30000;
+
+    function normalizeApiBase(value) {
+        return String(value || '').trim().replace(/\/+$/, '');
+    }
+
+    function pushUniqueApiBase(list, value) {
+        const normalized = normalizeApiBase(value);
+        if (!normalized || list.includes(normalized)) return;
+        list.push(normalized);
+    }
+
+    function getApiConfig() {
+        const globalConfig = window.__796HELPER_CONFIG__ || {};
+        const movieSearchConfig = globalConfig.movieSearch || {};
+        const configuredApiBases = []
+            .concat(window.__MOVIE_SEARCH_API_BASES__ || [])
+            .concat(window.__MOVIE_SEARCH_API_BASE__ || [])
+            .concat(globalConfig.movieSearchApiBases || [])
+            .concat(globalConfig.movieSearchApiBase || [])
+            .concat(movieSearchConfig.apiBases || [])
+            .concat(movieSearchConfig.apiBase || []);
+        const apiBases = [];
+
+        configuredApiBases.forEach(base => {
+            if (Array.isArray(base)) {
+                base.forEach(item => pushUniqueApiBase(apiBases, item));
+                return;
+            }
+            pushUniqueApiBase(apiBases, base);
+        });
+        DEFAULT_API_BASES.forEach(base => pushUniqueApiBase(apiBases, base));
+
+        return {
+            apiBases,
+            enableExternalFallback: movieSearchConfig.enableExternalFallback !== false &&
+                globalConfig.enableMovieSearchExternalFallback !== false
+        };
+    }
 
     // ==================== 缓存管理器 ====================
     const CACHE_SCHEMA_VERSION = '2.0.2';
+
     const CACHE_PREFIX_BASE = '796h-mc-';
     const CACHE_PREFIX = `${CACHE_PREFIX_BASE}${CACHE_SCHEMA_VERSION}-`;
     const CACHE_VERSION_KEY = `${CACHE_PREFIX_BASE}schema-version`;
@@ -197,7 +238,17 @@ const MovieSearchPage = (function () {
         other: { bg: 'rgba(99, 110, 130, 0.15)', text: '#636E82', border: 'rgba(99, 110, 130, 0.3)' },
     };
 
+    const sourceSearchParams = {
+        all: { panChannel: 'all', pansearch: '' },
+        baidu: { panChannel: 'baidu', pansearch: 'baidu' },
+        quark: { panChannel: 'kuake', pansearch: 'quark' },
+        ali: { panChannel: 'ali', pansearch: 'aliyun' },
+        thunder: { panChannel: 'xunlei', pansearch: 'xunlei' },
+        tianyi: { panChannel: 'tianyi', pansearch: '' }
+    };
+
     function getSourceStyle(source) {
+
         return sourceColors[source] || sourceColors.other;
     }
 
@@ -338,6 +389,39 @@ const MovieSearchPage = (function () {
         `;
     }
 
+    let lastResultMode = 'normal';
+    let lastSearchNotice = '';
+
+    function setSearchNotice(mode, message) {
+
+        lastResultMode = mode || 'normal';
+        lastSearchNotice = message || '';
+    }
+
+    function clearSearchNotice() {
+        lastResultMode = 'normal';
+        lastSearchNotice = '';
+    }
+
+    function renderSearchNotice() {
+        if (!lastSearchNotice) return '';
+        const icon = lastResultMode === 'fallback' ? 'shield-alert' : 'info';
+        const borderColor = lastResultMode === 'fallback'
+            ? 'rgba(241, 196, 15, 0.28)'
+            : 'rgba(108, 92, 231, 0.28)';
+        const background = lastResultMode === 'fallback'
+            ? 'rgba(241, 196, 15, 0.08)'
+            : 'rgba(108, 92, 231, 0.08)';
+        const iconColor = lastResultMode === 'fallback' ? '#F1C40F' : 'var(--primary)';
+
+        return `
+            <div class="movie-results-notice" style="display:flex;align-items:flex-start;gap:10px;margin-bottom:14px;padding:12px 14px;border-radius:14px;border:1px solid ${borderColor};background:${background};color:var(--text-secondary);">
+                <i data-lucide="${icon}" style="width:16px;height:16px;color:${iconColor};flex-shrink:0;margin-top:1px;"></i>
+                <span>${escapeHtml(lastSearchNotice)}</span>
+            </div>
+        `;
+    }
+
     function renderResults() {
         if (filteredResults.length === 0 && searchResults.length > 0) {
             return `
@@ -352,6 +436,7 @@ const MovieSearchPage = (function () {
         }
 
         return `
+            ${renderSearchNotice()}
             <div class="movie-results-header">
                 <span>找到 <strong>${filteredResults.length}</strong> 个资源</span>
             </div>
@@ -360,6 +445,7 @@ const MovieSearchPage = (function () {
             </div>
         `;
     }
+
 
     function render() {
         return `
@@ -518,18 +604,127 @@ const MovieSearchPage = (function () {
     }
 
     // ==================== 核心搜索流程 ====================
+    function buildSearchUrl(apiBase, keyword, source) {
+        const sourceParam = source !== 'all' ? `&source=${encodeURIComponent(source)}` : '';
+        return `${apiBase}/api/search?keyword=${encodeURIComponent(keyword)}${sourceParam}`;
+    }
+
+    function safeParseJson(text) {
+        if (!text) return null;
+        try {
+            return JSON.parse(text);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function normalizeRequestError(err) {
+        if (!err) return '搜索服务请求失败';
+        if (err.message === 'SEARCH_TIMEOUT') return '搜索超时，请检查网络后重试（已超过30秒）';
+        if (err.name === 'AbortError') return '请求已取消';
+        if (err.message && /failed to fetch|networkerror|load failed|fetch failed/i.test(err.message)) {
+            return '搜索服务当前不可达，请检查代理地址或网络环境';
+        }
+        return err.message || '搜索服务请求失败';
+    }
+
+    async function requestSearchFromApis(keyword, source, signal) {
+        const { apiBases, enableExternalFallback } = getApiConfig();
+        const attemptErrors = [];
+
+        for (let i = 0; i < apiBases.length; i++) {
+            const apiBase = apiBases[i];
+            try {
+                const response = await fetch(buildSearchUrl(apiBase, keyword, source), {
+                    signal,
+                    headers: { 'Accept': 'application/json' },
+                    cache: 'no-store'
+                });
+                const responseText = await response.text();
+                const data = safeParseJson(responseText);
+
+                if (!response.ok) {
+                    const errorMsg = data && data.error
+                        ? data.error
+                        : `搜索服务响应异常（HTTP ${response.status}）`;
+                    attemptErrors.push(errorMsg);
+                    if (response.status >= 400 && response.status < 500 && response.status !== 429) {
+                        return { success: false, error: errorMsg, attemptErrors, enableExternalFallback: false };
+                    }
+                    continue;
+                }
+
+                if (data && data.success === true) {
+                    return {
+                        success: true,
+                        data: Array.isArray(data.data) ? data.data : [],
+                        apiBase,
+                        attemptErrors,
+                        notice: i > 0 ? '主搜索代理不可达，已自动切换到备用代理。' : ''
+                    };
+                }
+
+                const errorMsg = data && data.error
+                    ? data.error
+                    : '搜索服务暂时不可用，请稍后重试';
+                attemptErrors.push(errorMsg);
+
+                if (data && data.code === 'INVALID_KEYWORD') {
+                    return { success: false, error: errorMsg, attemptErrors, enableExternalFallback: false };
+                }
+            } catch (err) {
+                if (err.name === 'AbortError') throw err;
+                attemptErrors.push(normalizeRequestError(err));
+            }
+        }
+
+        return {
+            success: false,
+            error: attemptErrors[attemptErrors.length - 1] || '搜索服务当前不可达，请稍后重试',
+            attemptErrors,
+            enableExternalFallback
+        };
+    }
+
+    function generateFallbackResults(keyword, source) {
+        const sourceConfig = sourceSearchParams[source] || sourceSearchParams.all;
+        const sourceOption = searchSourceOptions.find(item => item.key === source);
+        const fallbackSource = source === 'all' ? 'other' : source;
+        const fallbackLabel = fallbackSource === 'other' ? '搜索页' : (sourceOption ? sourceOption.label : '搜索页');
+        const encodedKeyword = encodeURIComponent(keyword);
+        const panParam = sourceConfig.pansearch ? `&pan=${sourceConfig.pansearch}` : '';
+
+        return [
+            {
+                title: `${keyword} - 打开 PanSearch 搜索结果页`,
+                source: fallbackSource,
+                sourceLabel: fallbackLabel,
+                link: `https://www.pansearch.me/search?keyword=${encodedKeyword}${panParam}`,
+                code: '',
+                time: '站外搜索'
+            },
+            {
+                title: `${keyword} - 打开 UP云搜 搜索结果页`,
+                source: fallbackSource,
+                sourceLabel: fallbackLabel,
+                link: `https://www.upyunso.com/search?keyword=${encodedKeyword}&pan_channel=${sourceConfig.panChannel}`,
+                code: '',
+                time: '站外搜索'
+            }
+        ];
+    }
+
     async function performSearch(keyword) {
         if (!keyword || keyword.trim().length === 0) return;
         if (isLoading) return; // 防止重复搜索
 
         currentKeyword = keyword.trim();
+        clearSearchNotice();
 
-        // 取消上一次请求
         if (abortController) {
             abortController.abort();
         }
 
-        // 检查缓存
         const cachedData = CacheManager.get(currentKeyword, currentSearchSource);
         if (cachedData) {
             searchResults = cachedData;
@@ -548,7 +743,6 @@ const MovieSearchPage = (function () {
         setSearchBtnLoading(true);
         startSearchTimer();
 
-        // 更新输入框
         const input = document.getElementById('movieSearchInput');
         if (input) input.value = currentKeyword;
         const clearBtn = document.getElementById('movieSearchClear');
@@ -556,15 +750,10 @@ const MovieSearchPage = (function () {
 
         abortController = new AbortController();
         const signal = abortController.signal;
-
-        const SEARCH_TIMEOUT = 30000;
         let timeoutId = null;
 
         try {
-            const sourceParam = currentSearchSource !== 'all' ? `&source=${currentSearchSource}` : '';
-            const fetchUrl = `${API_BASE}/api/search?keyword=${encodeURIComponent(currentKeyword)}${sourceParam}`;
-
-            const fetchPromise = fetch(fetchUrl, { signal, headers: { 'Accept': 'application/json' } });
+            const requestPromise = requestSearchFromApis(currentKeyword, currentSearchSource, signal);
             const timeoutPromise = new Promise((_, reject) => {
                 timeoutId = setTimeout(() => {
                     if (abortController) abortController.abort();
@@ -572,19 +761,23 @@ const MovieSearchPage = (function () {
                 }, SEARCH_TIMEOUT);
             });
 
-            const response = await Promise.race([fetchPromise, timeoutPromise]);
+            const outcome = await Promise.race([requestPromise, timeoutPromise]);
             clearTimeout(timeoutId);
             timeoutId = null;
 
-            const data = await response.json();
-
             if (signal.aborted) return;
 
-            if (data.success) {
-                searchResults = data.data || [];
+            if (outcome.success) {
+                searchResults = outcome.data;
                 filteredResults = [...searchResults];
-                // 缓存结果
                 CacheManager.set(currentKeyword, currentSearchSource, searchResults);
+                if (outcome.notice) {
+                    setSearchNotice('notice', outcome.notice);
+                }
+            } else if (outcome.enableExternalFallback !== false) {
+                searchResults = generateFallbackResults(currentKeyword, currentSearchSource);
+                filteredResults = [...searchResults];
+                setSearchNotice('fallback', `${outcome.error || '搜索代理暂时不可用'}，已切换为站外搜索入口，可直接打开搜索结果页。`);
             } else {
                 searchResults = [];
                 filteredResults = [];
@@ -593,7 +786,7 @@ const MovieSearchPage = (function () {
                 setSearchBtnLoading(false);
                 const contentArea = document.getElementById('movieContentArea');
                 if (contentArea) {
-                    contentArea.innerHTML = renderErrorState(data.error || '搜索失败');
+                    contentArea.innerHTML = renderErrorState(outcome.error || '搜索失败');
                     if (window.lucide) lucide.createIcons();
                 }
                 return;
@@ -605,20 +798,9 @@ const MovieSearchPage = (function () {
                 setSearchBtnLoading(false);
                 return;
             }
-            if (err.message === 'SEARCH_TIMEOUT') {
-                isLoading = false;
-                stopSearchTimer();
-                setSearchBtnLoading(false);
-                const contentArea = document.getElementById('movieContentArea');
-                if (contentArea) {
-                    contentArea.innerHTML = renderErrorState('搜索超时，请检查网络后重试（已超过30秒）');
-                    if (window.lucide) lucide.createIcons();
-                }
-                return;
-            }
-            console.warn('API 请求失败，使用演示数据:', err.message);
-            searchResults = generateDemoData(currentKeyword);
+            searchResults = generateFallbackResults(currentKeyword, currentSearchSource);
             filteredResults = [...searchResults];
+            setSearchNotice('fallback', `${normalizeRequestError(err)}，已切换为站外搜索入口，可直接打开搜索结果页。`);
         }
 
         isLoading = false;
@@ -632,66 +814,6 @@ const MovieSearchPage = (function () {
         performSearch(keyword);
     }, 300);
 
-    // 演示数据生成（API 不可用时的 fallback）
-    function generateDemoData(keyword) {
-        const sources = currentSearchSource === 'all'
-            ? [
-                { source: 'baidu', sourceLabel: '百度网盘' },
-                { source: 'quark', sourceLabel: '夸克网盘' },
-                { source: 'thunder', sourceLabel: '迅雷网盘' },
-                { source: 'ali', sourceLabel: '阿里云盘' },
-            ]
-            : [searchSourceOptions.find(s => s.key === currentSearchSource)]
-                .filter(Boolean)
-                .map(s => ({ source: s.key, sourceLabel: s.label }));
-
-        if (sources.length === 0) return [];
-
-        // 来源对应的 pan_channel 参数映射
-        const panChannelMap = {
-            'all': 'all', 'baidu': 'baidu', 'quark': 'kuake',
-            'ali': 'ali', 'thunder': 'xunlei', 'tianyi': 'tianyi'
-        };
-
-        const qualities = ['4K', '1080P', '720P', 'HDR', '蓝光'];
-        const types = ['', '完整版', '国语配音', '中英双字', '导演剪辑版'];
-        const results = [];
-
-        // 生成 UP 云搜搜索页链接（可实际打开的链接）
-        const panChannel = panChannelMap[currentSearchSource] || 'all';
-        const searchLink = `https://www.upyunso.com/search?keyword=${encodeURIComponent(keyword)}&pan_channel=${panChannel}`;
-
-        const count = 6 + Math.floor(Math.random() * 10);
-        for (let i = 0; i < count; i++) {
-            const src = sources[Math.floor(Math.random() * sources.length)];
-            const quality = qualities[Math.floor(Math.random() * qualities.length)];
-            const type = types[Math.floor(Math.random() * types.length)];
-            const titleSuffix = [quality, type].filter(Boolean).join(' ');
-
-            results.push({
-                title: `${keyword} ${titleSuffix}`,
-                source: src.source,
-                sourceLabel: src.sourceLabel,
-                link: searchLink,
-                code: Math.random() > 0.3 ? generateCode() : '',
-                time: generateDate(),
-            });
-        }
-        return results;
-    }
-
-    function generateCode() {
-        const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-        let code = '';
-        for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
-        return code;
-    }
-
-    function generateDate() {
-        const d = new Date();
-        d.setDate(d.getDate() - Math.floor(Math.random() * 90));
-        return d.toISOString().slice(0, 10);
-    }
 
     function copyToClipboard(text) {
         if (navigator.clipboard) {

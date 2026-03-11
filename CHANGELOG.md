@@ -6,7 +6,22 @@
 
 ---
 
+## [v2.0.4] - 2026-03-11
+
+### 修复
+- **影视搜索单一代理失效即整体失败**：前端搜索改为优先读取 `window.__796HELPER_CONFIG__.movieSearch.apiBases`，按顺序轮询代理地址；默认仍兼容既有 `workers.dev` 地址
+- **代理不可达时只能报错或展示随机演示数据**：当所有代理都不可用或搜索超时时，自动生成 `PanSearch` 与 `UP云搜` 的真实站外搜索入口，并在结果区显示提示横幅，避免用户持续看到“搜索失败”
+- **Worker 响应结构不稳定**：`/api/search` 新增统一 `version` / `code` / `source` 字段，`/health` 补充 `routes` 信息，便于前端兼容与线上排障
+
+### 验证
+- 已通过 `js/pages/movie-search.js`、`worker/index.js`、`index.html` 的静态复核
+- 已通过针对修改文件的 linter 检查；`js/pages/movie-search.js` 仅保留原有 `document.execCommand` 弃用提示
+- 当前环境下外网 Worker 地址仍不可达，未完成线上实时搜索验收
+
+---
+
 ## [v2.0.2] - 2026-03-11
+
 
 ### 修复
 - **影视资源旧缓存污染新结果**：为前端 `sessionStorage` 搜索缓存增加 `2.0.2` schema 版本隔离，首次读取时自动清理旧 `796h-mc-` 命名空间，避免继续命中历史 UP 云搜搜索页链接

@@ -1,7 +1,8 @@
 /* ============================================
    796Helper - Cloudflare Workers 影视资源搜索代理
-   v2.0.0 - 双搜索源竞速版（PanSearch + UP云搜）
+   v2.0.4 - 双搜索源竞速版（PanSearch + UP云搜）
    ============================================ */
+
 
 // CORS 配置
 const CORS_HEADERS = {
@@ -87,7 +88,23 @@ const FETCH_HEADERS = {
     'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
 };
 
-const WORKER_VERSION = '2.0.2';
+const WORKER_VERSION = '2.0.4';
+const JSON_HEADERS = {
+    'Content-Type': 'application/json; charset=UTF-8'
+};
+
+function jsonResponse(payload, init = {}) {
+    return new Response(JSON.stringify({
+        version: WORKER_VERSION,
+        ...payload
+    }), {
+        ...init,
+        headers: { ...JSON_HEADERS, ...CORS_HEADERS, ...(init.headers || {}) }
+    });
+}
+
+
+
 
 // ==================== PanSearch 搜索源 ====================
 // PanSearch 搜索结果 HTML 中可能以裸链接、属性值或转义字符串形式包含真实的网盘链接
@@ -464,11 +481,15 @@ async function handleRequest(request) {
         const source = url.searchParams.get('source') || 'all';
 
         if (!keyword || keyword.trim().length === 0) {
-            return new Response(JSON.stringify({
-                success: false, error: '请输入搜索关键词', data: [], total: 0
-            }), {
-                status: 400,
-                headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
+            return jsonResponse({
+                success: false,
+                code: 'INVALID_KEYWORD',
+                error: '请输入搜索关键词',
+                data: [],
+                total: 0,
+                source
+            }, {
+                status: 400
             });
         }
 
@@ -480,38 +501,48 @@ async function handleRequest(request) {
             );
 
             const results = await Promise.race([searchPromise, timeoutPromise]);
-            return new Response(JSON.stringify({
-                success: true, data: results, total: results.length, keyword: keyword.trim()
-            }), {
-                headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
+            return jsonResponse({
+                success: true,
+                data: results,
+                total: results.length,
+                keyword: keyword.trim(),
+                source
             });
         } catch (err) {
             const isTimeout = err.message === 'WORKER_TIMEOUT';
-            return new Response(JSON.stringify({
+            return jsonResponse({
                 success: false,
+                code: isTimeout ? 'SEARCH_TIMEOUT' : 'SEARCH_UNAVAILABLE',
                 error: isTimeout ? '搜索超时，上游源响应过慢，请稍后重试' : '搜索服务暂时不可用，请稍后重试',
-                data: [], total: 0
-            }), {
-                status: isTimeout ? 504 : 500,
-                headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
+                data: [],
+                total: 0,
+                keyword: keyword ? keyword.trim() : '',
+                source
+            }, {
+                status: isTimeout ? 504 : 500
             });
         }
     }
 
+
     if (url.pathname === '/health') {
-        return new Response(JSON.stringify({
-            status: 'ok', service: '796Helper Movie Search Proxy', version: WORKER_VERSION,
+        return jsonResponse({
+            status: 'ok',
+            service: '796Helper Movie Search Proxy',
+            routes: ['/api/search', '/health'],
             sources: ['pansearch', 'upyunso']
-        }), {
-            headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
         });
     }
 
-    return new Response(JSON.stringify({ error: 'Not Found' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
+    return jsonResponse({
+        success: false,
+        code: 'NOT_FOUND',
+        error: 'Not Found'
+    }, {
+        status: 404
     });
 }
+
 
 // Workers 入口
 export default {
