@@ -17,6 +17,24 @@ const Sidebar = (function () {
         return window.innerWidth <= 768;
     }
 
+    function syncMobileState(open) {
+        isMobileOpen = open;
+
+        if (sidebar) {
+            sidebar.classList.toggle('mobile-open', open);
+        }
+
+        if (overlay) {
+            overlay.classList.toggle('active', open);
+        }
+
+        document.body.classList.toggle('sidebar-mobile-open', open);
+
+        if (mobileMenuBtn) {
+            mobileMenuBtn.setAttribute('aria-expanded', String(open));
+        }
+    }
+
     function collapse() {
         if (!sidebar) return;
         isCollapsed = true;
@@ -40,34 +58,26 @@ const Sidebar = (function () {
     }
 
     function openMobile() {
-        if (!sidebar || !overlay) return;
-        isMobileOpen = true;
-        sidebar.classList.add('mobile-open');
-        overlay.classList.add('active');
-        overlay.style.display = 'block';
-        // Trigger reflow for animation
-        requestAnimationFrame(() => {
-            overlay.classList.add('active');
-        });
+        if (!isMobile()) return;
+        syncMobileState(true);
     }
 
     function closeMobile() {
-        if (!sidebar || !overlay) return;
-        isMobileOpen = false;
-        sidebar.classList.remove('mobile-open');
-        overlay.classList.remove('active');
-        setTimeout(() => {
-            if (!isMobileOpen) {
-                overlay.style.display = '';
-            }
-        }, 300);
+        syncMobileState(false);
+    }
+
+    function toggleMobile() {
+        if (isMobileOpen) {
+            closeMobile();
+        } else {
+            openMobile();
+        }
     }
 
     function handleNavClick(e) {
         const navItem = e.target.closest('.nav-item');
         if (!navItem) return;
 
-        // Close mobile sidebar on nav click
         if (isMobile() && isMobileOpen) {
             closeMobile();
         }
@@ -79,35 +89,38 @@ const Sidebar = (function () {
         }
     }
 
+    function handleKeydown(e) {
+        if (e.key === 'Escape' && isMobileOpen) {
+            closeMobile();
+        }
+    }
+
     function init() {
-        // Restore collapsed state (desktop only)
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved === 'true' && !isMobile()) {
             collapse();
         }
 
-        // Toggle button (desktop collapse)
         if (toggleBtn) {
             toggleBtn.addEventListener('click', toggle);
         }
 
-        // Mobile menu button
         if (mobileMenuBtn) {
-            mobileMenuBtn.addEventListener('click', openMobile);
+            mobileMenuBtn.setAttribute('aria-expanded', 'false');
+            mobileMenuBtn.addEventListener('click', toggleMobile);
         }
 
-        // Overlay click to close
         if (overlay) {
             overlay.addEventListener('click', closeMobile);
         }
 
-        // Nav item click
         if (sidebar) {
             sidebar.addEventListener('click', handleNavClick);
         }
 
-        // Resize handler
         window.addEventListener('resize', handleResize);
+        window.addEventListener('routechange', closeMobile);
+        document.addEventListener('keydown', handleKeydown);
     }
 
     return {
@@ -119,3 +132,4 @@ const Sidebar = (function () {
         closeMobile
     };
 })();
+
