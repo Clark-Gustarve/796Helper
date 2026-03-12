@@ -1,6 +1,6 @@
 /* ============================================
    796Helper - Movie Search Page Module
-   影视资源搜索页面（v2.0.5 PanSearch 直链优先版）
+   影视资源搜索页面（v2.0.6 PanSearch 直链渲染版）
    ============================================ */
 
 const MovieSearchPage = (function () {
@@ -50,7 +50,7 @@ const MovieSearchPage = (function () {
     }
 
     // ==================== 缓存管理器 ====================
-    const CACHE_SCHEMA_VERSION = '2.0.5';
+    const CACHE_SCHEMA_VERSION = '2.0.6';
 
     const CACHE_PREFIX_BASE = '796h-mc-';
     const CACHE_PREFIX = `${CACHE_PREFIX_BASE}${CACHE_SCHEMA_VERSION}-`;

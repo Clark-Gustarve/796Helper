@@ -6,6 +6,22 @@
 
 ---
 
+## [v2.0.6] - 2026-03-12
+
+### 修复
+- **PanSearch 页面可见内容被截断导致直链丢失**：Worker 解析 `pansearch.me/search` 时，优先读取 Next.js 的 `__NEXT_DATA__` JSON，从完整 `content` 字段提取真实网盘链接，而不再只依赖页面卡片上的截断 HTML
+- **搜索结果继续命中修复前缓存**：前端缓存 schema 升级到 `2.0.6`，避免浏览器继续复用旧的空结果或搜索页结果缓存
+
+### 文档
+- **部署验收与技术说明同步收敛**：更新 `部署后验收清单.md` 与 `796Helper-技术文档.md`，统一为 `v2.0.6`、`PanSearch` 真实网盘直链、`workers.dev` 默认入口的当前口径
+
+### 验证
+- 已直接抓取 `PanSearch` 搜索页源码，确认真实网盘链接位于 `__NEXT_DATA__` 的 `props.pageProps.data.data[].content`
+- 已通过 `worker/index.js`、`js/pages/movie-search.js` 的 linter 检查；`js/pages/movie-search.js` 仅保留原有 `document.execCommand` 弃用提示
+- 当前修改已完成静态链路修复，尚未在本地完成重新部署后的线上验收
+
+---
+
 ## [v2.0.5] - 2026-03-11
 
 ### 调整

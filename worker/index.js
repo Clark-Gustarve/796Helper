@@ -1,6 +1,6 @@
 /* ============================================
    796Helper - Cloudflare Workers 影视资源搜索代理
-   v2.0.5 - PanSearch 直链优先版
+   v2.0.6 - PanSearch __NEXT_DATA__ 直链提取版
    ============================================ */
 
 
@@ -85,7 +85,7 @@ const FETCH_HEADERS = {
     'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
 };
 
-const WORKER_VERSION = '2.0.5';
+const WORKER_VERSION = '2.0.6';
 
 const JSON_HEADERS = {
     'Content-Type': 'application/json; charset=UTF-8'
@@ -105,7 +105,7 @@ function jsonResponse(payload, init = {}) {
 
 
 // ==================== PanSearch 搜索源 ====================
-// PanSearch 搜索结果 HTML 中可能以裸链接、属性值或转义字符串形式包含真实的网盘链接
+// PanSearch 当前为 Next.js SSR 页面：可见卡片常为截断内容，真实网盘链接通常位于 __NEXT_DATA__ JSON 的 content 字段中
 
 const RE_DIRECT_PAN_LINK = /https?:\/\/(?:pan\.baidu\.com|yun\.baidu\.com|drive\.quark\.cn|(?:www\.)?alipan\.com|(?:www\.)?aliyundrive\.com|pan\.xunlei\.com|cloud\.189\.cn|115\.com|lanzou[a-z]*\.com)[^\s"'<>)}\]\,]+/i;
 const RE_PAN_LINK = /https?:\/\/(?:pan\.baidu\.com|yun\.baidu\.com|drive\.quark\.cn|(?:www\.)?alipan\.com|(?:www\.)?aliyundrive\.com|pan\.xunlei\.com|cloud\.189\.cn|115\.com|lanzou[a-z]*\.com)[^\s"'<>)}\]\,]+/gi;
@@ -119,6 +119,7 @@ const RE_CODE_IN_TEXT = /(?:提取码|访问码|密码)[:：\s]*([a-zA-Z0-9]{4,8
 const RE_SKIP_PAN_TITLE = /^(链接|展开|收起|描述|来源|标签|复制|打开|下载|搜索|分享|PanSearch|网盘|资源|立即打开|查看详情|\d+\s*(条|页|个)|共\s*\d+)/;
 const RE_UNICODE_ESCAPE = /\\u([0-9a-fA-F]{4})/g;
 const RE_HEX_ESCAPE = /\\x([0-9a-fA-F]{2})/g;
+const RE_NEXT_DATA = /<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i;
 
 function isDirectPanLink(url) {
     return !!(url && RE_DIRECT_PAN_LINK.test(url));
@@ -257,10 +258,106 @@ function extractPanTitle(context, keyword) {
     return fallback.replace(/^\s*[\d.、]+\s*/, '').trim() || keyword;
 }
 
+function safeJsonParse(value) {
+    if (!value) return null;
+    try {
+        return JSON.parse(value);
+    } catch (err) {
+        return null;
+    }
+}
+
+function stripHtmlTags(text) {
+    return String(text || '')
+        .replace(/<br\s*\/?\s*>/gi, '\n')
+        .replace(/<\/(?:p|div|li|ul|ol|h[1-6])>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&#39;/gi, "'")
+        .replace(/&quot;/gi, '"')
+        .trim();
+}
+
+function cleanupPanTitle(title, keyword) {
+    return String(title || '')
+        .replace(/^(?:名称|资源名称|频道新增资源)[:：]\s*/i, '')
+        .trim() || keyword;
+}
+
+function normalizePanSearchTime(value) {
+    const text = String(value || '').trim();
+    const match = text.match(RE_TIME_IN_TEXT);
+    return match ? match[1] : '';
+}
+
+function detectSourceByPanType(panType, text) {
+    const normalized = String(panType || '').trim().toLowerCase();
+    const sourceMap = {
+        baidu: { key: 'baidu', label: '百度网盘' },
+        quark: { key: 'quark', label: '夸克网盘' },
+        aliyun: { key: 'ali', label: '阿里云盘' },
+        ali: { key: 'ali', label: '阿里云盘' },
+        xunlei: { key: 'thunder', label: '迅雷网盘' },
+        thunder: { key: 'thunder', label: '迅雷网盘' },
+        tianyi: { key: 'tianyi', label: '天翼云盘' },
+        '115': { key: '115', label: '115网盘' },
+        lanzou: { key: 'other', label: '蓝奏云' }
+    };
+
+    return sourceMap[normalized] || detectSourceByText(String(text || normalized));
+}
+
+function extractNextDataResults(html, keyword) {
+    const match = RE_NEXT_DATA.exec(html);
+    RE_NEXT_DATA.lastIndex = 0;
+    if (!match) return [];
+
+    const payload = safeJsonParse(match[1]);
+    const items = payload && payload.props && payload.props.pageProps && payload.props.pageProps.data && payload.props.pageProps.data.data;
+    if (!Array.isArray(items) || items.length === 0) return [];
+
+    const results = [];
+
+    for (const item of items) {
+        const rawContent = decodeEscapedText(String(item && item.content || ''));
+        const plainText = stripHtmlTags(rawContent);
+        const links = extractPanUrls(rawContent);
+        if (links.length === 0) continue;
+
+        const title = cleanupPanTitle(extractPanTitle(rawContent, keyword), keyword);
+        const time = normalizePanSearchTime(item && item.time) || normalizePanSearchTime(plainText);
+        const sourceFromItem = detectSourceByPanType(item && item.pan, plainText);
+
+        for (const link of links) {
+            const pwdMatch = link.match(RE_PWD);
+            const codeMatch = pwdMatch || plainText.match(RE_CODE_IN_TEXT);
+            const source = detectSourceByUrl(link) || sourceFromItem || detectSourceByText(plainText);
+
+            results.push({
+                title,
+                source: source.key,
+                sourceLabel: source.label,
+                link,
+                code: codeMatch ? codeMatch[1] : '',
+                time
+            });
+        }
+    }
+
+    return results;
+}
+
 function parsePanSearchResults(html, keyword) {
+    const nextDataResults = extractNextDataResults(html, keyword);
+    if (nextDataResults.length > 0) {
+        return nextDataResults;
+    }
+
     const results = [];
     const cleanHtml = extractBody(html)
-        .replace(/<script[\s\S]*?<\/script>/gi, '')
         .replace(/<style[\s\S]*?<\/style>/gi, '');
 
     const allLinks = extractPanUrls(cleanHtml);
@@ -268,7 +365,7 @@ function parsePanSearchResults(html, keyword) {
 
     for (const link of allLinks) {
         const context = extractPanContext(cleanHtml, link);
-        const title = extractPanTitle(context, keyword);
+        const title = cleanupPanTitle(extractPanTitle(context, keyword), keyword);
         const timeMatch = context.match(RE_TIME_IN_TEXT);
         const pwdMatch = link.match(RE_PWD);
         const codeMatch = pwdMatch || context.match(RE_CODE_IN_TEXT);
