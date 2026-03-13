@@ -6,6 +6,22 @@
 
 ---
 
+## [v2.0.8] - 2026-03-13
+
+### 调整
+- **影视搜索默认不再依赖固定 `workers.dev` 地址**：`index.html` 与 `js/pages/movie-search.js` 默认 `apiBases` 改为空数组，无增强服务时直接返回 `PanSearch` 搜索结果页入口
+- **代理设置收敛为可选增强搜索**：页面设置区改名为“增强搜索设置”，支持按顺序填入兼容 `/api/search` 的服务地址；未配置时明确展示站外搜索模式
+- **搜索缓存继续按服务签名隔离**：前端缓存 schema 升级到 `2.0.8`，确保无增强服务、预设增强服务和用户自定义增强服务之间不会互相污染
+
+### 文档
+- **删除自定义域名专用说明**：移除 `Cloudflare Worker自定义域名操作清单.md` 与 `cloudflare-checklist.html`
+- **部署与技术说明同步收敛**：更新 `部署后验收清单.md` 与 `796Helper-技术文档.md`，统一为“默认站外搜索、可选增强搜索”的当前口径
+
+### 验证
+- 已通过 `js/pages/movie-search.js` 的 `node --check` 语法校验
+- 已复核 `js/pages/movie-search.js`、`index.html`、`css/pages.css` 的诊断；仅保留原有 `document.execCommand` 弃用提示
+- 当前为代码与文档收敛调整，未在本地完成实时外网搜索验收
+
 ## [v2.0.6] - 2026-03-12
 
 ### 修复

@@ -1,17 +1,18 @@
 /* ============================================
    796Helper - Movie Search Page Module
-   影视资源搜索页面（v2.0.6 PanSearch 直链渲染版）
+   影视资源搜索页面（v2.0.8 默认站外搜索版）
+
    ============================================ */
 
 const MovieSearchPage = (function () {
     const title = '影视搜索';
 
-    const DEFAULT_API_BASES = [
-        'https://796helper-movie-search.clown8379.workers.dev'
-    ];
+    const DEFAULT_API_BASES = [];
     const SEARCH_TIMEOUT = 30000;
+    const PROXY_STORAGE_KEY = '796helper-movie-search-api-bases';
 
     function normalizeApiBase(value) {
+
         return String(value || '').trim().replace(/\/+$/, '');
     }
 
@@ -21,10 +22,53 @@ const MovieSearchPage = (function () {
         list.push(normalized);
     }
 
+    function readSavedApiBases() {
+        try {
+            const raw = localStorage.getItem(PROXY_STORAGE_KEY);
+            const parsed = raw ? JSON.parse(raw) : [];
+            return Array.isArray(parsed)
+                ? parsed.map(normalizeApiBase).filter(Boolean)
+                : [];
+        } catch (err) {
+            return [];
+        }
+    }
+
+    function writeSavedApiBases(apiBases) {
+        try {
+            const normalized = Array.isArray(apiBases)
+                ? apiBases.map(normalizeApiBase).filter(Boolean)
+                : [];
+            if (normalized.length === 0) {
+                localStorage.removeItem(PROXY_STORAGE_KEY);
+                return;
+            }
+            localStorage.setItem(PROXY_STORAGE_KEY, JSON.stringify(normalized));
+        } catch (err) {
+            // 忽略存储异常，仍允许继续使用当前配置
+        }
+    }
+
+    function parseApiBasesInput(value) {
+        return String(value || '')
+            .split(/[\n,，;；]+/)
+            .map(normalizeApiBase)
+            .filter(Boolean)
+            .filter((item, index, list) => list.indexOf(item) === index);
+    }
+
+    function formatApiBasesText(apiBases) {
+        return Array.isArray(apiBases) ? apiBases.join('\n') : '';
+    }
+
     function getApiConfig() {
+
         const globalConfig = window.__796HELPER_CONFIG__ || {};
         const movieSearchConfig = globalConfig.movieSearch || {};
+        const savedApiBases = readSavedApiBases();
         const configuredApiBases = []
+            .concat(savedApiBases)
+
             .concat(window.__MOVIE_SEARCH_API_BASES__ || [])
             .concat(window.__MOVIE_SEARCH_API_BASE__ || [])
             .concat(globalConfig.movieSearchApiBases || [])
@@ -44,13 +88,17 @@ const MovieSearchPage = (function () {
 
         return {
             apiBases,
+            savedApiBases,
+            usingCustomApiBases: savedApiBases.length > 0,
+            defaultApiBases: [...DEFAULT_API_BASES],
             enableExternalFallback: movieSearchConfig.enableExternalFallback !== false &&
                 globalConfig.enableMovieSearchExternalFallback !== false
         };
+
     }
 
     // ==================== 缓存管理器 ====================
-    const CACHE_SCHEMA_VERSION = '2.0.6';
+    const CACHE_SCHEMA_VERSION = '2.0.8';
 
     const CACHE_PREFIX_BASE = '796h-mc-';
     const CACHE_PREFIX = `${CACHE_PREFIX_BASE}${CACHE_SCHEMA_VERSION}-`;
@@ -58,7 +106,22 @@ const MovieSearchPage = (function () {
     const CACHE_TTL = 5 * 60 * 1000; // 5分钟
     const CACHE_MAX = 20;
 
+    function buildTextSignature(text) {
+        const source = String(text || 'default');
+        let hash = 0;
+        for (let i = 0; i < source.length; i++) {
+            hash = ((hash << 5) - hash + source.charCodeAt(i)) | 0;
+        }
+        return Math.abs(hash).toString(36);
+    }
+
+    function getApiCacheSignature() {
+        const { apiBases } = getApiConfig();
+        return buildTextSignature(apiBases.join('|'));
+    }
+
     const CacheManager = {
+
         _useStorage: (function () {
             try {
                 const key = '__796h_test__';
@@ -94,8 +157,9 @@ const MovieSearchPage = (function () {
         },
 
         _getKey(keyword, source) {
-            return CACHE_PREFIX + keyword + '__' + source;
+            return CACHE_PREFIX + keyword + '__' + source + '__' + getApiCacheSignature();
         },
+
 
         get(keyword, source) {
             const key = this._getKey(keyword, source);
@@ -314,7 +378,56 @@ const MovieSearchPage = (function () {
         }).join('');
     }
 
+    function renderProxySettings() {
+        const { apiBases, savedApiBases, usingCustomApiBases } = getApiConfig();
+        const usingConfiguredApiBases = !usingCustomApiBases && apiBases.length > 0;
+        const summaryText = usingCustomApiBases
+            ? '已启用自定义增强搜索'
+            : (usingConfiguredApiBases ? '当前使用预设增强搜索' : '当前使用站外搜索模式');
+        const description = usingCustomApiBases
+            ? '当前会优先按顺序尝试你保存的增强搜索服务地址；如首个地址失败，会自动切换到后续地址。'
+            : (usingConfiguredApiBases
+                ? '当前会优先按顺序尝试预设的增强搜索服务地址；如首个地址失败，会自动切换到后续地址。'
+                : '默认会直接给出 PanSearch 搜索结果页入口；如需返回更完整的直链结果，可在这里填入兼容 /api/search 的增强搜索服务地址。');
+        const currentChain = apiBases.length > 0
+            ? apiBases.map(base => `<code>${escapeHtml(base)}</code>`).join('<span class="movie-proxy-chain-sep">→</span>')
+            : '<code>未配置增强服务，将直接使用 PanSearch 搜索页</code>';
+
+        return `
+            <details class="movie-proxy-card" ${usingCustomApiBases ? 'open' : ''}>
+                <summary class="movie-proxy-summary">
+                    <span class="movie-proxy-summary-main">
+                        <i data-lucide="shield-check" style="width:16px;height:16px;"></i>
+                        <span>增强搜索设置</span>
+                    </span>
+                    <span class="movie-proxy-summary-meta">${summaryText}</span>
+                </summary>
+                <div class="movie-proxy-panel">
+                    <p class="movie-proxy-desc">${description}</p>
+                    <div class="movie-proxy-current">
+                        <span class="movie-proxy-current-label">当前顺序</span>
+                        <div class="movie-proxy-chain">${currentChain}</div>
+                    </div>
+                    <textarea class="movie-proxy-input" id="movieProxyInput" placeholder="https://your-search-service.example.com">${escapeHtml(formatApiBasesText(savedApiBases))}</textarea>
+                    <div class="movie-proxy-actions">
+                        <button class="btn btn-primary movie-proxy-save-btn" id="movieProxySaveBtn" type="button">
+                            <i data-lucide="save" style="width:16px;height:16px;"></i>
+                            <span>保存地址</span>
+                        </button>
+                        <button class="btn btn-ghost movie-proxy-reset-btn" id="movieProxyResetBtn" type="button">
+                            <i data-lucide="rotate-ccw" style="width:16px;height:16px;"></i>
+                            <span>清空配置</span>
+                        </button>
+                    </div>
+                    <p class="movie-proxy-hint">每行一个地址；未配置时会直接进入 <code>PanSearch</code> 搜索页，有配置时才尝试增强直链搜索。</p>
+
+                </div>
+            </details>
+        `;
+    }
+
     function renderFilterTags() {
+
         return filterTags.map(tag => {
             const active = currentSource === tag.key ? 'active' : '';
             const count = tag.key === 'all'
@@ -340,7 +453,7 @@ const MovieSearchPage = (function () {
                     </div>
                 </div>
                 <h3 class="movie-state-title">搜索影视资源</h3>
-                <p class="movie-state-desc">输入影视名称，从网盘平台快速搜索资源</p>
+                <p class="movie-state-desc">默认会为你打开 <code>PanSearch</code> 搜索结果页；如已配置增强搜索服务，将优先尝试返回真实网盘直链。</p>
             </div>
         `;
     }
@@ -406,14 +519,18 @@ const MovieSearchPage = (function () {
 
     function renderSearchNotice() {
         if (!lastSearchNotice) return '';
-        const icon = lastResultMode === 'fallback' ? 'shield-alert' : 'info';
+        const icon = lastResultMode === 'fallback'
+            ? 'shield-alert'
+            : (lastResultMode === 'external' ? 'compass' : 'info');
         const borderColor = lastResultMode === 'fallback'
             ? 'rgba(241, 196, 15, 0.28)'
-            : 'rgba(108, 92, 231, 0.28)';
+            : (lastResultMode === 'external' ? 'rgba(0, 206, 201, 0.24)' : 'rgba(108, 92, 231, 0.28)');
         const background = lastResultMode === 'fallback'
             ? 'rgba(241, 196, 15, 0.08)'
-            : 'rgba(108, 92, 231, 0.08)';
-        const iconColor = lastResultMode === 'fallback' ? '#F1C40F' : 'var(--primary)';
+            : (lastResultMode === 'external' ? 'rgba(0, 206, 201, 0.08)' : 'rgba(108, 92, 231, 0.08)');
+        const iconColor = lastResultMode === 'fallback'
+            ? '#F1C40F'
+            : (lastResultMode === 'external' ? 'var(--accent)' : 'var(--primary)');
 
         return `
             <div class="movie-results-notice" style="display:flex;align-items:flex-start;gap:10px;margin-bottom:14px;padding:12px 14px;border-radius:14px;border:1px solid ${borderColor};background:${background};color:var(--text-secondary);">
@@ -421,6 +538,12 @@ const MovieSearchPage = (function () {
                 <span>${escapeHtml(lastSearchNotice)}</span>
             </div>
         `;
+    }
+
+    function getResultsHeaderText() {
+        return (lastResultMode === 'fallback' || lastResultMode === 'external')
+            ? '已准备 <strong>' + filteredResults.length + '</strong> 个可继续打开的搜索入口'
+            : '找到 <strong>' + filteredResults.length + '</strong> 个资源';
     }
 
     function renderResults() {
@@ -439,7 +562,7 @@ const MovieSearchPage = (function () {
         return `
             ${renderSearchNotice()}
             <div class="movie-results-header">
-                <span>找到 <strong>${filteredResults.length}</strong> 个资源</span>
+                <span>${getResultsHeaderText()}</span>
             </div>
             <div class="movie-results-list">
                 ${filteredResults.map((item, i) => renderResultCard(item, i)).join('')}
@@ -476,7 +599,12 @@ const MovieSearchPage = (function () {
                     <div class="movie-source-selector" id="movieSourceSelector">
                         ${renderSearchSourceSelector()}
                     </div>
+
+                    <div class="movie-proxy-settings" id="movieProxySettings">
+                        ${renderProxySettings()}
+                    </div>
                 </div>
+
 
                 <!-- Filter Tags (post-search) -->
                 <div class="movie-filter-bar ${searchResults.length > 0 ? '' : 'hidden'}" id="movieFilterBar">
@@ -559,7 +687,7 @@ const MovieSearchPage = (function () {
                     `;
                     if (window.lucide) lucide.createIcons();
                 } else {
-                    resultsHeader.innerHTML = `<span>找到 <strong>${filteredResults.length}</strong> 个资源</span>`;
+                    resultsHeader.innerHTML = `<span>${getResultsHeaderText()}</span>`;
                     resultsList.innerHTML = filteredResults.map((item, i) => renderResultCard(item, i)).join('');
                     if (window.lucide) lucide.createIcons();
                 }
@@ -604,7 +732,16 @@ const MovieSearchPage = (function () {
         }
     }
 
+    function updateProxySettings() {
+        const settings = document.getElementById('movieProxySettings');
+        if (settings) {
+            settings.innerHTML = renderProxySettings();
+            if (window.lucide) lucide.createIcons();
+        }
+    }
+
     // ==================== 核心搜索流程 ====================
+
     function buildSearchUrl(apiBase, keyword, source) {
         const sourceParam = source !== 'all' ? `&source=${encodeURIComponent(source)}` : '';
         return `${apiBase}/api/search?keyword=${encodeURIComponent(keyword)}${sourceParam}`;
@@ -624,7 +761,7 @@ const MovieSearchPage = (function () {
         if (err.message === 'SEARCH_TIMEOUT') return '搜索超时，请检查网络后重试（已超过30秒）';
         if (err.name === 'AbortError') return '请求已取消';
         if (err.message && /failed to fetch|networkerror|load failed|fetch failed/i.test(err.message)) {
-            return '搜索服务当前不可达，请检查代理地址或网络环境';
+            return '搜索服务当前不可达，请检查增强搜索地址或网络环境';
         }
         return err.message || '搜索服务请求失败';
     }
@@ -661,7 +798,7 @@ const MovieSearchPage = (function () {
                         data: Array.isArray(data.data) ? data.data : [],
                         apiBase,
                         attemptErrors,
-                        notice: i > 0 ? '主搜索代理不可达，已自动切换到备用代理。' : ''
+                        notice: i > 0 ? '首个增强搜索地址不可达，已自动切换到后续地址。' : ''
                     };
                 }
 
@@ -719,12 +856,23 @@ const MovieSearchPage = (function () {
             abortController.abort();
         }
 
+        const { apiBases } = getApiConfig();
         const cachedData = CacheManager.get(currentKeyword, currentSearchSource);
         if (cachedData) {
             searchResults = cachedData;
             filteredResults = [...searchResults];
             currentSource = 'all';
             isLoading = false;
+            updateContent();
+            return;
+        }
+
+        if (apiBases.length === 0) {
+            searchResults = generateFallbackResults(currentKeyword, currentSearchSource);
+            filteredResults = [...searchResults];
+            currentSource = 'all';
+            isLoading = false;
+            setSearchNotice('external', '当前未配置增强搜索服务，已直接为你准备 PanSearch 搜索页入口。');
             updateContent();
             return;
         }
@@ -771,7 +919,7 @@ const MovieSearchPage = (function () {
             } else if (outcome.enableExternalFallback !== false) {
                 searchResults = generateFallbackResults(currentKeyword, currentSearchSource);
                 filteredResults = [...searchResults];
-                setSearchNotice('fallback', `${outcome.error || '搜索代理暂时不可用'}，已切换为 PanSearch 搜索页，可继续尝试获取真实网盘链接。`);
+                setSearchNotice('fallback', `${outcome.error || '增强搜索服务暂时不可用'}，已切换为 PanSearch 搜索页，可继续尝试获取真实网盘链接。`);
 
             } else {
                 searchResults = [];
@@ -900,7 +1048,33 @@ const MovieSearchPage = (function () {
         }
     }
 
+    function handleProxySettingsClick(e) {
+        const saveBtn = e.target.closest('.movie-proxy-save-btn');
+        if (saveBtn) {
+            const input = document.getElementById('movieProxyInput');
+            const apiBases = parseApiBasesInput(input ? input.value : '');
+            writeSavedApiBases(apiBases);
+            updateProxySettings();
+            showToast(apiBases.length > 0 ? `已保存 ${apiBases.length} 个增强搜索地址` : '已清空增强搜索配置');
+            if (currentKeyword && !isLoading) {
+                performSearch(currentKeyword);
+            }
+            return;
+        }
+
+        const resetBtn = e.target.closest('.movie-proxy-reset-btn');
+        if (resetBtn) {
+            writeSavedApiBases([]);
+            updateProxySettings();
+            showToast('已清空增强搜索配置');
+            if (currentKeyword && !isLoading) {
+                performSearch(currentKeyword);
+            }
+        }
+    }
+
     // ==================== 初始化 ====================
+
     function init() {
         const searchInput = document.getElementById('movieSearchInput');
         const searchBtn = document.getElementById('movieSearchBtn');
@@ -908,6 +1082,8 @@ const MovieSearchPage = (function () {
         const contentArea = document.getElementById('movieContentArea');
         const filterBar = document.getElementById('movieFilterBar');
         const sourceSelector = document.getElementById('movieSourceSelector');
+        const proxySettings = document.getElementById('movieProxySettings');
+
 
         // 搜索按钮点击（即时触发，不防抖）
         if (searchBtn) {
@@ -958,7 +1134,9 @@ const MovieSearchPage = (function () {
         if (contentArea) contentArea.addEventListener('click', handleContentAreaClick);
         if (filterBar) filterBar.addEventListener('click', handleFilterBarClick);
         if (sourceSelector) sourceSelector.addEventListener('click', handleSourceSelectorClick);
+        if (proxySettings) proxySettings.addEventListener('click', handleProxySettingsClick);
     }
+
 
     return { title, render, init };
 })();
