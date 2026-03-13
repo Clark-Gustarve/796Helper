@@ -18,7 +18,9 @@
 ### 验证
 - 已直接抓取 `PanSearch` 搜索页源码，确认真实网盘链接位于 `__NEXT_DATA__` 的 `props.pageProps.data.data[].content`
 - 已通过 `worker/index.js`、`js/pages/movie-search.js` 的 linter 检查；`js/pages/movie-search.js` 仅保留原有 `document.execCommand` 弃用提示
-- 当前修改已完成静态链路修复，尚未在本地完成重新部署后的线上验收
+- 已通过 `wrangler deployments status --name 796helper-movie-search --json` 确认生产版本 `ec7874ec-4ce2-4392-b2b9-b171af123a76` 以 `100%` 流量生效
+- 已确认当前网络对 `workers.dev` 存在访问层异常：`796helper-movie-search.clown8379.workers.dev` 解析为 `31.13.95.169`、`workers.dev` 解析为 `128.242.240.221`，`/health` HTTPS 请求报“基础连接已经关闭”；问题更接近本地 DNS/TLS 干扰，而不是 `worker/index.js` 缺少路由
+
 
 ---
 
